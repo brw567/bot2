@@ -1,7 +1,11 @@
 import logging
+import sqlite3
+import pandas as pd
+from config import DB_PATH
 from strategies.base_strategy import BaseStrategy
 from utils.ccxt_utils import calculate_spread  # No circular: dynamic imports in ccxt_utils
 from utils.grok_utils import get_risk_assessment
+from utils.binance_utils import get_binance_client
 
 logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
 

@@ -3,14 +3,20 @@ import threading
 import time
 import asyncio
 import logging
+import json
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
+import talib
 from st_aggrid import AgGrid, GridOptionsBuilder
 import redis
 from config import DB_PATH, DEFAULT_PARAMS, REDIS_HOST, REDIS_PORT, REDIS_DB, BINANCE_WEIGHT_LIMIT
 from utils.binance_utils import get_binance_client
-from utils.grok_utils import get_sentiment_analysis, get_risk_assessment
+from utils.grok_utils import (
+    get_sentiment_analysis,
+    get_risk_assessment,
+    get_grok_recommendation,
+)
 from utils.onchain_utils import fetch_sth_rpl
 from utils.ml_utils import predict_next_price, train_model, fetch_historical_data
 from strategies.arbitrage_strategy import ArbitrageStrategy
@@ -187,7 +193,17 @@ if __name__ == '__main__':
         ohlcv = client.fetch_ohlcv('BTC/USDT', '1m', limit=100)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        fig = go.Figure(data=[go.Candlestick(x=df['timestamp'], open=df['open', high=df['high'], low=df['low'], close=df['close'])])
+        fig = go.Figure(
+            data=[
+                go.Candlestick(
+                    x=df['timestamp'],
+                    open=df['open'],
+                    high=df['high'],
+                    low=df['low'],
+                    close=df['close']
+                )
+            ]
+        )
         fig.update_layout(xaxis_rangeslider_visible=True, dragmode='zoom')  # Live interaction
         st.plotly_chart(fig, use_container_width=True)
 

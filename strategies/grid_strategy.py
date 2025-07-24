@@ -1,5 +1,7 @@
 import logging
 import pandas as pd
+import sqlite3
+from config import DB_PATH
 from strategies.base_strategy import BaseStrategy
 from utils.binance_utils import get_binance_client, execute_trade
 
