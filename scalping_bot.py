@@ -20,29 +20,6 @@ from backtest import simple_backtest, advanced_backtest, ml_backtest
 
 logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
 
-def get_signal_score(symbol, price, ta_score, sentiment, onchain_rpl):
-    """
-    Calculate aggregated signal score for trading decisions.
-    Formula: 0.4*TA + 0.3*sentiment + 0.3*onchain + 0.2*ML + 0.1*cluster (scaled by volatility).
-    Note: Logs components for debugging; ML and cluster from Redis/ml_utils.
-    """
-    try:
-        onchain_score = 1 if price > onchain_rpl * 1.05 else -1 if price < onchain_rpl * 0.95 else 0
-        score = 0.4 * ta_score + 0.3 * sentiment['score'] + 0.3 * onchain_score
-        # ML prediction
-        recent_data = fetch_historical_data(symbol, '5m', years=0.01).iloc[-60:][['close', 'volume', 'rsi']].values
-        pred = predict_next_price(st.session_state.get('ml_model'), recent_data[-1]) if 'ml_model' in st.session_state else 0
-        ml_boost = 0.2 if pred > price * 1.005 else 0
-        score += ml_boost
-        # Placeholder cluster
-        cluster_boost = 0.1  # From scikit-learn in live
-        score += cluster_boost
-        logging.info(f"Signal components for {symbol}: TA={0.4 * ta_score}, sentiment={0.3 * sentiment['score']}, onchain={0.3 * onchain_score}, ML={ml_boost}, cluster={cluster_boost}, total={score}")
-        return score
-    except Exception as e:
-        logging.error(f"Signal score failed: {e}")
-        return 0.0
-
 
 # Redis setup for pub/sub
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
@@ -50,60 +27,43 @@ pubsub = r.pubsub()
 pubsub.subscribe('winrate_updates', 'ml_updates')
 
 def redis_subscriber():
-    """
-    Subscribe to Redis channels for real-time winrate and ML updates.
-    Updates Streamlit session state for GUI display.
-    """
     for message in pubsub.listen():
         if message['type'] == 'message':
             channel = message['channel'].decode()
             data = json.loads(message['data'].decode())
             if channel == 'winrate_updates':
                 st.session_state['winrate'] = data['winrate']
-                logging.info(f"Updated winrate: {data['winrate']}")
             elif channel == 'ml_updates':
                 st.session_state['ml_prediction'] = data['prediction']
-                logging.info(f"Updated ML prediction: {data['prediction']}")
 
-# Start Redis subscriber in background thread
 threading.Thread(target=redis_subscriber, daemon=True).start()
 
 def init_db():
-    """
-    Initialize SQLite database with tables for settings and trades.
-    Note: Creates schema for parameters and trade logs; used for winrate tracking.
-    """
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS settings
-                         (key TEXT PRIMARY KEY, value TEXT)''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS trades
-                         (id INTEGER PRIMARY KEY, symbol TEXT, profit FLOAT, timestamp DATETIME)''')
-        for k, v in DEFAULT_PARAMS.items():
-            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, str(v)))
-        conn.commit()
-    except sqlite3.Error as e:
-        logging.error(f"Database initialization failed: {e}")
-    finally:
-        conn.close()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS settings
+                      (key TEXT PRIMARY KEY, value TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS pair_settings
+                      (pair TEXT, key TEXT, value TEXT, PRIMARY KEY (pair, key))''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS trades
+                      (id INTEGER PRIMARY KEY, symbol TEXT, profit FLOAT, timestamp DATETIME)''')
+    for k, v in DEFAULT_PARAMS.items():
+        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, str(v)))
+    conn.commit()
+    conn.close()
 
-def load_params():
-    """
-    Load trading parameters from SQLite database.
-    Returns: dict of params (e.g., win_rate_threshold).
-    """
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
+def load_params(pair=None):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    if pair:
+        cursor.execute("SELECT key, value FROM pair_settings WHERE pair=?", (pair,))
+        params = {row[0]: float(row[1]) if row[1].replace('.', '', 1).isdigit() else row[1] for row in cursor.fetchall()}
+    else:
         cursor.execute("SELECT * FROM settings")
         params = {row[0]: float(row[1]) if row[1].replace('.', '', 1).isdigit() else row[1] for row in cursor.fetchall()}
-        return params
-    except sqlite3.Error as e:
-        logging.error(f"Failed to load params: {e}")
-        return DEFAULT_PARAMS
-    finally:
-        conn.close()
+    conn.close()
+    return params
+
 
 def get_signal_score(symbol, price, ta_score, sentiment, onchain_rpl):
     """
@@ -195,31 +155,43 @@ async def monitoring_loop():
 
 # GUI
 if __name__ == '__main__':
-    # Initialize DB and ML model
     init_db()
     params = load_params()
     logging.info(f"Loaded params: {params}")
-    st.session_state['ml_model'] = train_model()[0]  # Load ML model
+    st.session_state['ml_model'] = train_model()[0]
 
-    # Start monitoring loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     threading.Thread(target=lambda: loop.run_until_complete(monitoring_loop()), daemon=True).start()
 
-    # Streamlit GUI
+    # Sidebar for critical buttons (always visible)
+    st.sidebar.title("Controls")
+    if st.sidebar.button('Pause Bot'):
+        logging.info("Bot paused")
+        # Pause logic
+    if st.sidebar.button('Resume Bot'):
+        logging.info("Bot resumed")
+        # Resume logic
+    if st.sidebar.button('Manual Trade'):
+        logging.info("Manual trade triggered")
+        # Manual trade logic
+    auto_mode = st.sidebar.checkbox('Auto Mode')
+    st.session_state['auto_mode'] = auto_mode
+
     st.title('Ultimate Crypto Scalping Bot')
     tab1, tab2, tab3 = st.tabs(['Dashboard', 'Backtest', 'Settings'])
 
     with tab1:
-        st.subheader('Real-time Chart')
+        st.subheader('Real-time Chart', help="Interact with the chart to zoom/pan for detailed analysis.")
         client = get_binance_client()
         ohlcv = client.fetch_ohlcv('BTC/USDT', '1m', limit=100)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        fig = go.Figure(data=[go.Candlestick(x=df['timestamp'], open=df['open'], high=df['high'], low=df['low'], close=df['close'])])
-        st.plotly_chart(fig)
+        fig = go.Figure(data=[go.Candlestick(x=df['timestamp'], open=df['open', high=df['high'], low=df['low'], close=df['close'])])
+        fig.update_layout(xaxis_rangeslider_visible=True, dragmode='zoom')  # Live interaction
+        st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader('Trade Log')
+        st.subheader('Trade Log', help="Sortable/filterable table of trades. Use filters for analysis.")
         conn = sqlite3.connect(DB_PATH)
         trades = pd.read_sql("SELECT * FROM trades", conn)
         conn.close()
@@ -228,40 +200,59 @@ if __name__ == '__main__':
         gb.configure_default_column(editable=False, sortable=True, filter=True)
         AgGrid(trades, gridOptions=gb.build(), height=300)
 
-        st.subheader('Live Metrics')
+        st.subheader('Live Metrics', help="Real-time key performance indicators.")
         winrate = st.session_state.get('winrate', 0.65)
-        st.metric('Winrate', f"{winrate:.2%}")
-        sharpe = 1.5  # Mock rolling Sharpe
-        st.metric('Sharpe Ratio', f"{sharpe:.2f}")
-
-        if st.button('Pause Bot'):
-            logging.info("Bot paused by user")
-            # Logic to pause loop (e.g., set flag)
-        if st.button('Resume Bot'):
-            logging.info("Bot resumed by user")
-        if st.button('Manual Trade'):
-            logging.info("Manual trade triggered")
-            # Placeholder for manual trade logic
+        st.metric('Winrate', f"{winrate:.2%}", help="Current win rate from trades")
+        sharpe = 1.5
+        st.metric('Sharpe Ratio', f"{sharpe:.2f}", help="Risk-adjusted return")
 
     with tab2:
-        st.subheader('Backtest Results')
-        backtest_mode = st.selectbox('Backtest Mode', ['Simple (vectorbt)', 'Advanced (backtrader)', 'ML'], key='backtest_mode')
-        st.session_state['backtest_mode'] = backtest_mode  # Persist in session
+        st.subheader('Backtest Results', help="Run simulations to test strategies. Select mode for different analysis.")
+        backtest_type = st.selectbox('Backtest Type', ['Simple (vectorbt)', 'Advanced (backtrader)', 'ML'], key='backtest_mode')
+        st.session_state['backtest_mode'] = backtest_type
         if st.button('Run Backtest'):
-            if backtest_mode == 'Simple (vectorbt)':
+            if backtest_type == 'Simple (vectorbt)':
                 results = simple_backtest()
-            elif backtest_mode == 'Advanced (backtrader)':
+            elif backtest_type == 'Advanced (backtrader)':
                 results = advanced_backtest()
             else:
                 results = ml_backtest()
             st.write(results)
 
     with tab3:
-        st.subheader('Parameters')
-        channels = st.multiselect('Select Telegram Channels', ['crypto_news_channel', 'other_channel'], key='channels')
+        st.subheader('Settings', help="Configure global and per-pair parameters. In auto mode, fields are locked.")
+        symbols = ['BTC/USDT', 'ETH/USDT']  # Example; extend dynamically
+        selected_pair = st.selectbox('Select Pair', symbols + ['Global'])
+        if selected_pair == 'Global':
+            params = load_params()
+        else:
+            params = load_params(selected_pair)
+        disabled = st.session_state.get('auto_mode', False)
+
+        # Risk and trading params
+        st.subheader('Risk Management', help="Adjust risk parameters. Locked in auto mode.")
+        risk_per_trade = st.slider('Risk per Trade', 0.005, 0.02, params.get('risk_per_trade', 0.01), disabled=disabled, help="Fraction of capital to risk per trade")
+        # ... add more sliders for all risk/trading params
+        if not disabled:
+            rec_risk = get_grok_recommendation(selected_pair, 'risk_per_trade')
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric('Recommended', rec_risk)
+            with col2:
+                if st.button('Apply'):
+                    # Update actual
+                    pass
+            with col3:
+                if st.button('Ignore'):
+                    pass
+
+        st.subheader('Telegram Configuration', help="Full Telegram setup, including channels.")
+        telegram_token = st.text_input('Telegram Token', type='password', disabled=disabled)
+        telegram_api_id = st.text_input('Telegram API ID', disabled=disabled)
+        telegram_api_hash = st.text_input('Telegram API Hash', type='password', disabled=disabled)
+        telegram_session = st.text_input('Telegram Session String', disabled=disabled)
+        channels = st.multiselect('Select Channels', ['crypto_news_channel', 'other_channel'], default=st.session_state.get('channels', []))
         st.session_state['channels'] = channels
-        risk_per_trade = st.slider('Risk per Trade', 0.005, 0.02, 0.01)
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute("UPDATE settings SET value=? WHERE key='risk_per_trade'", (risk_per_trade,))
-        conn.commit()
-        conn.close()
+        if st.button('Save Telegram Config', disabled=disabled):
+            # Save to .env or DB
+            pass
