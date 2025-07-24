@@ -1,9 +1,9 @@
 import ccxt
-import logging
+from utils.logger import get_logger
 import asyncio
 from config import BINANCE_API_KEY, BINANCE_API_SECRET
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+logger = get_logger(__name__)
 
 def get_ccxt_client(exchange='binance'):
     """
@@ -28,7 +28,7 @@ def get_ccxt_client(exchange='binance'):
         else:
             raise ValueError(f"Unsupported exchange: {exchange}")
     except Exception as e:
-        logging.error(f"CCXT client initialization failed for {exchange}: {e}")
+        logger.error(f"CCXT client initialization failed for {exchange}: {e}")
         raise
 
 def calculate_spread(symbol_spot, symbol_futures):
@@ -51,10 +51,10 @@ def calculate_spread(symbol_spot, symbol_futures):
         spot_price = spot_ticker['last']
         futures_price = futures_ticker['last']
         spread = abs(spot_price - futures_price) / spot_price
-        logging.info(f"Spread calculated: {symbol_spot}/{symbol_futures}, spread={spread:.4f}")
+        logger.info(f"Spread calculated: {symbol_spot}/{symbol_futures}, spread={spread:.4f}")
         return spread
     except Exception as e:
-        logging.error(f"Spread calculation failed for {symbol_spot}/{symbol_futures}: {e}")
+        logger.error(f"Spread calculation failed for {symbol_spot}/{symbol_futures}: {e}")
         return 0.0
 
 def log_trade(trade_info):
@@ -70,8 +70,8 @@ def log_trade(trade_info):
     try:
         from utils.telegram_utils import send_notification  # Dynamic import
         asyncio.run(send_notification(f"Trade executed: {trade_info}"))
-        logging.info(f"Trade logged: {trade_info}")
+        logger.info(f"Trade logged: {trade_info}")
     except ImportError as e:
-        logging.error(f"Dynamic import of telegram_utils failed: {e}")
+        logger.error(f"Dynamic import of telegram_utils failed: {e}")
     except Exception as e:
-        logging.error(f"Log trade failed: {e}")
+        logger.error(f"Log trade failed: {e}")

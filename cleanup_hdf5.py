@@ -1,10 +1,10 @@
 import os
 import time
 import h5py
-import logging
+from utils.logger import get_logger
 from config import HDF5_DIR
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+logger = get_logger(__name__)
 
 def cleanup():
     """
@@ -20,7 +20,7 @@ def cleanup():
     """
     try:
         if not os.path.exists(HDF5_DIR):
-            logging.warning(f"HDF5 directory {HDF5_DIR} does not exist; skipping cleanup")
+            logger.warning(f"HDF5 directory {HDF5_DIR} does not exist; skipping cleanup")
             return
 
         now = time.time()
@@ -39,13 +39,13 @@ def cleanup():
                     if file_mtime < now - retention_seconds:
                         os.remove(file_path)
                         total_deleted_size += file_size
-                        logging.info(f"Deleted HDF5 file: {file_path} ({file_size / 1024 / 1024:.2f} MB)")
+                        logger.info(f"Deleted HDF5 file: {file_path} ({file_size / 1024 / 1024:.2f} MB)")
                 except (h5py.HDF5ExtError, OSError) as e:
-                    logging.error(f"Failed to validate or delete {file_path}: {e}")
+                    logger.error(f"Failed to validate or delete {file_path}: {e}")
         if total_deleted_size > 0:
-            logging.info(f"Total deleted size: {total_deleted_size / 1024 / 1024:.2f} MB")
+            logger.info(f"Total deleted size: {total_deleted_size / 1024 / 1024:.2f} MB")
     except Exception as e:
-        logging.error(f"HDF5 cleanup failed: {e}")
+        logger.error(f"HDF5 cleanup failed: {e}")
 
 if __name__ == '__main__':
     cleanup()

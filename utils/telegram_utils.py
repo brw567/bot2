@@ -1,11 +1,11 @@
-import logging
+from utils.logger import get_logger
 import sqlite3
 import asyncio
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from config import TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION, DB_PATH
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+logger = get_logger(__name__)
 
 async def get_client():
     """
@@ -20,7 +20,7 @@ async def get_client():
         client = TelegramClient(StringSession(TELEGRAM_SESSION), TELEGRAM_API_ID, TELEGRAM_API_HASH)
         return client
     except Exception as e:
-        logging.error(f"Telegram client initialization failed: {e}")
+        logger.error(f"Telegram client initialization failed: {e}")
         raise
 
 async def send_notification(message):
@@ -36,9 +36,9 @@ async def send_notification(message):
         client = await get_client()
         await client.start()
         await client.send_message('me', message)
-        logging.info(f"Notification sent: {message}")
+        logger.info(f"Notification sent: {message}")
     except Exception as e:
-        logging.error(f"Telegram notification failed: {e}")
+        logger.error(f"Telegram notification failed: {e}")
     finally:
         await client.disconnect()
 
@@ -68,7 +68,7 @@ async def fetch_channel_messages(channel, limit=100):
         await client.start()
         messages = await client.get_messages(channel, limit=limit, min_id=0, offset_date=last_pull_ts)
         texts = [msg.text for msg in messages if msg.text and msg.date > last_pull_ts]
-        logging.info(f"Fetched {len(texts)} messages from {channel}")
+        logger.info(f"Fetched {len(texts)} messages from {channel}")
 
         # Update last pull timestamp
         if messages:
@@ -80,7 +80,7 @@ async def fetch_channel_messages(channel, limit=100):
 
         return texts
     except Exception as e:
-        logging.error(f"Fetch messages failed for {channel}: {e}")
+        logger.error(f"Fetch messages failed for {channel}: {e}")
         return []
     finally:
         await client.disconnect()

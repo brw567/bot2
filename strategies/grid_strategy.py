@@ -1,11 +1,11 @@
-import logging
+from utils.logger import get_logger
 import pandas as pd
 import sqlite3
 from config import DB_PATH
 from strategies.base_strategy import BaseStrategy
 from utils.binance_utils import get_binance_client, execute_trade
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+logger = get_logger(__name__)
 
 class GridStrategy(BaseStrategy):
     """
@@ -47,19 +47,19 @@ class GridStrategy(BaseStrategy):
             typ = (df['h'] + df['l'] + df['c']) / 3
             vwap = (typ * df['v']).cumsum() / df['v'].cumsum().iloc[-1]
             center = vwap.iloc[-1]
-            logging.info(f"VWAP calculated for {symbol}: {center:.2f}")
+            logger.info(f"VWAP calculated for {symbol}: {center:.2f}")
 
             # Risk check via Grok
             vol = 0.02  # Mock volatility; replace with statsmodels in prod
             sl, tp = self.get_dynamic_sl_tp(symbol, center, vol)
             if not sl or not tp:
-                logging.info(f"Grid skipped for {symbol}: Invalid SL/TP")
+                logger.info(f"Grid skipped for {symbol}: Invalid SL/TP")
                 return
 
             # Position sizing
             size = self.calculate_position_size(center, (center - sl) / center)
             if size <= 0:
-                logging.info(f"Grid skipped for {symbol}: Invalid position size")
+                logger.info(f"Grid skipped for {symbol}: Invalid position size")
                 return
 
             # Place grid orders
@@ -69,9 +69,9 @@ class GridStrategy(BaseStrategy):
                 try:
                     execute_trade(symbol, 'buy', size / self.levels, price=buy_price)
                     execute_trade(symbol, 'sell', size / self.levels, price=sell_price)
-                    logging.info(f"Grid order placed: {symbol}, buy={buy_price:.2f}, sell={sell_price:.2f}, size={size / self.levels:.6f}")
+                    logger.info(f"Grid order placed: {symbol}, buy={buy_price:.2f}, sell={sell_price:.2f}, size={size / self.levels:.6f}")
                 except Exception as e:
-                    logging.error(f"Grid order failed for {symbol}: {e}")
+                    logger.error(f"Grid order failed for {symbol}: {e}")
 
             # Log trade to DB (mock profit for simplicity)
             conn = sqlite3.connect(DB_PATH)
@@ -80,4 +80,4 @@ class GridStrategy(BaseStrategy):
             conn.commit()
             conn.close()
         except Exception as e:
-            logging.error(f"Grid run failed for {symbol}: {e}")
+            logger.error(f"Grid run failed for {symbol}: {e}")

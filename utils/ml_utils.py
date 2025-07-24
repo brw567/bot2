@@ -5,10 +5,10 @@ import pandas as pd
 import talib
 import ccxt
 import time
-import logging
+from utils.logger import get_logger
 from config import BINANCE_API_KEY, BINANCE_API_SECRET
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+logger = get_logger(__name__)
 
 class PriceLSTM(nn.Module):
     """
@@ -73,10 +73,10 @@ def fetch_historical_data(symbol='BTC/USDT', timeframe='5m', years=1):
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df['rsi'] = talib.RSI(df['close'])
         df['ema'] = talib.EMA(df['close'], 12)
-        logging.info(f"Fetched {len(df)} candles for {symbol}")
+        logger.info(f"Fetched {len(df)} candles for {symbol}")
         return df.dropna()
     except Exception as e:
-        logging.error(f"Historical data fetch failed for {symbol}: {e}")
+        logger.error(f"Historical data fetch failed for {symbol}: {e}")
         return pd.DataFrame()
 
 def train_model(symbol='BTC/USDT', epochs=5):
@@ -88,18 +88,20 @@ def train_model(symbol='BTC/USDT', epochs=5):
         epochs (int): Number of training epochs (default 5 for quick sims).
 
     Returns:
-        tuple: (model, train_loss, val_loss)
+        tuple: (model, mean, std, train_loss, val_loss)
 
     Note: Uses 80/20 train/validation split; checks for overfitting (val_loss < 1.2*train_loss).
     """
     try:
-        model = PriceLSTM(input_size=3)  # Close, volume, RSI
+        model = PriceLSTM(input_size=3)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
         criterion = nn.MSELoss()
 
         df = fetch_historical_data(symbol, years=1)
-        features = df[['close', 'volume', 'rsi']].values
-        features = (features - features.mean(0)) / features.std(0)  # Normalize
+        features = df[['close', 'volume', 'rsi']].values.astype(float)
+        mean = features.mean(0)
+        std = features.std(0) + 1e-8
+        features = (features - mean) / std
         split = int(0.8 * len(features))
         train_X, val_X = features[:split, :-1], features[split:, :-1]
         train_y, val_y = features[1:split+1, 0], features[split+1:, 0]
@@ -118,22 +120,24 @@ def train_model(symbol='BTC/USDT', epochs=5):
             with torch.no_grad():
                 val_output = model(val_X)
                 val_loss = criterion(val_output, val_y)
-            logging.info(f"Epoch {epoch+1}: train_loss={train_loss:.4f}, val_loss={val_loss:.4f}")
+            logger.info(f"Epoch {epoch+1}: train_loss={train_loss:.4f}, val_loss={val_loss:.4f}")
 
         if val_loss > train_loss * 1.2:
-            logging.warning("Potential overfitting detected")
-        return model, train_loss.item(), val_loss.item()
+            logger.warning("Potential overfitting detected")
+        return model, mean, std, train_loss.item(), val_loss.item()
     except Exception as e:
-        logging.error(f"Model training failed for {symbol}: {e}")
-        return None, 0.0, 0.0
+        logger.error(f"Model training failed for {symbol}: {e}")
+        return None, np.zeros(3), np.ones(3), 0.0, 0.0
 
-def predict_next_price(model, recent_data):
+def predict_next_price(model, recent_data, mean, std):
     """
     Predict next price using trained LSTM model.
 
     Args:
         model (PriceLSTM): Trained LSTM model.
         recent_data (np.ndarray): Recent features (close, volume, RSI).
+        mean (np.ndarray): Feature means from training.
+        std (np.ndarray): Feature std devs from training.
 
     Returns:
         float: Predicted next price.
@@ -142,14 +146,14 @@ def predict_next_price(model, recent_data):
     """
     try:
         if model is None:
-            logging.error("No trained model provided for prediction")
+            logger.error("No trained model provided for prediction")
             return 0.0
-        input_data = (recent_data - recent_data.mean(0)) / recent_data.std(0)
+        input_data = (recent_data - mean) / std
         input_tensor = torch.tensor(input_data.reshape(1, 1, 3), dtype=torch.float32)
         with torch.no_grad():
             pred = model(input_tensor).item()
-        logging.info(f"Predicted next price: {pred:.2f}")
+        logger.info(f"Predicted next price: {pred:.2f}")
         return pred
     except Exception as e:
-        logging.error(f"Price prediction failed: {e}")
+        logger.error(f"Price prediction failed: {e}")
         return 0.0

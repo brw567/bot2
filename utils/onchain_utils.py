@@ -1,8 +1,8 @@
-import logging
+from utils.logger import get_logger
 from dune_client.client import DuneClient
 from config import DUNE_API_KEY, DUNE_QUERY_ID
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+logger = get_logger(__name__)
 
 def fetch_sth_rpl(symbol='BTC'):
     """
@@ -20,7 +20,7 @@ def fetch_sth_rpl(symbol='BTC'):
     """
     try:
         if symbol != 'BTC':
-            logging.warning(f"STH RPL only supported for BTC, not {symbol}")
+            logger.warning(f"STH RPL only supported for BTC, not {symbol}")
             return 0.0
 
         client = DuneClient(DUNE_API_KEY)
@@ -31,11 +31,11 @@ def fetch_sth_rpl(symbol='BTC'):
         # Assume data structure: extract latest STH RPL
         if data and 'rows' in data and data['rows']:
             rpl = float(data['rows'][0].get('realized_price_sth', 0.0))
-            logging.info(f"Fetched STH RPL for {symbol}: {rpl:.2f}")
+            logger.info(f"Fetched STH RPL for {symbol}: {rpl:.2f}")
             return rpl
         else:
-            logging.warning(f"No STH RPL data returned for {symbol}")
+            logger.warning(f"No STH RPL data returned for {symbol}")
             return 0.0
     except Exception as e:
-        logging.error(f"Dune API fetch failed for {symbol}: {e}")
+        logger.error(f"Dune API fetch failed for {symbol}: {e}")
         return 0.0

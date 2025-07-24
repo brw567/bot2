@@ -1,13 +1,13 @@
 import requests
 import json
-import logging
+from utils.logger import get_logger
 import asyncio
 import streamlit as st
 from pydantic import BaseModel, ValidationError
 from utils.telegram_utils import fetch_channel_messages
 from config import GROK_API_KEY
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+logger = get_logger(__name__)
 
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"  # Grok API endpoint (per xAI docs, July 2025)
 
@@ -54,16 +54,16 @@ def grok_api_call(prompt):
         # Validate based on task
         if prompt.get('task') == 'sentiment_analysis':
             validated = SentimentResponse(**result)
-            logging.info(f"Grok sentiment response: {validated.dict()}")
+            logger.info(f"Grok sentiment response: {validated.dict()}")
             return validated
         elif prompt.get('task') == 'risk_assessment':
             validated = RiskResponse(**result)
-            logging.info(f"Grok risk response: {validated.dict()}")
+            logger.info(f"Grok risk response: {validated.dict()}")
             return validated
         else:
             raise ValueError(f"Unknown task: {prompt.get('task')}")
     except (requests.RequestException, json.JSONDecodeError, ValidationError) as e:
-        logging.error(f"Grok API call failed: {e}")
+        logger.error(f"Grok API call failed: {e}")
         return SentimentResponse(sentiment="neutral", score=0.0, details="Validation failed") if prompt.get('task') == 'sentiment_analysis' else RiskResponse(trade="no", sl_mult=0.0, tp_mult=0.0, details="Validation failed")
 
 async def get_sentiment_analysis(symbol):
@@ -93,7 +93,7 @@ async def get_sentiment_analysis(symbol):
         }
         return grok_api_call(prompt)
     except Exception as e:
-        logging.error(f"Sentiment analysis failed for {symbol}: {e}")
+        logger.error(f"Sentiment analysis failed for {symbol}: {e}")
         return SentimentResponse(sentiment="neutral", score=0.0, details="Error in processing")
 
 def get_risk_assessment(symbol, price, vol, winrate):
@@ -125,7 +125,7 @@ def get_risk_assessment(symbol, price, vol, winrate):
         }
         return grok_api_call(prompt)
     except Exception as e:
-        logging.error(f"Risk assessment failed for {symbol}: {e}")
+        logger.error(f"Risk assessment failed for {symbol}: {e}")
         return RiskResponse(trade="no", sl_mult=0.0, tp_mult=0.0, details="Error in processing")
 
 
@@ -145,5 +145,5 @@ def get_grok_recommendation(symbol: str, param: str) -> float:
             return float(result.value)
         return 0.0
     except Exception as e:
-        logging.error(f"Parameter recommendation failed for {symbol} {param}: {e}")
+        logger.error(f"Parameter recommendation failed for {symbol} {param}: {e}")
         return 0.0
