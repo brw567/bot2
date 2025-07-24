@@ -74,11 +74,11 @@ class BaseStrategy:
         """
         try:
             risk = get_risk_assessment(symbol, price, vol, 0.65)  # Mock winrate
-            if risk.get('trade') != 'yes':
+            if risk.trade != 'yes':
                 logging.info(f"Trade not approved by Grok for {symbol}")
                 return None, None
-            sl = price * (1 - vol * risk['sl_mult'])
-            tp = price * (1 + vol * risk['tp_mult'])
+            sl = price * (1 - vol * risk.sl_mult)
+            tp = price * (1 + vol * risk.tp_mult)
             logging.info(f"SL/TP for {symbol}: SL={sl:.2f}, TP={tp:.2f}")
             return sl, tp
         except Exception as e:
