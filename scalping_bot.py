@@ -20,7 +20,7 @@ from utils.grok_utils import (
     SentimentResponse,
 )
 from utils.onchain_utils import fetch_sth_rpl
-from utils.ml_utils import predict_next_price, train_model, fetch_historical_data
+from utils.ml_utils import predict_next_price, train_model
 from strategies.arbitrage_strategy import ArbitrageStrategy
 from strategies.grid_strategy import GridStrategy
 from strategies.mev_strategy import MEVStrategy
@@ -87,7 +87,28 @@ def load_trading_pairs():
     return pairs
 
 
-def get_signal_score(symbol, price, ta_score, sentiment, onchain_rpl):
+# Simple in-memory cache for recent OHLCV data
+CANDLE_CACHE = {}
+CACHE_EXPIRY = 60 * 5  # 5 minutes
+
+
+def fetch_recent_candles(symbol, timeframe='5m', limit=60):
+    """Fetch recent candles with caching to reduce API calls."""
+    cache_key = (symbol, timeframe)
+    cached = CANDLE_CACHE.get(cache_key)
+    if cached and time.time() - cached['timestamp'] < CACHE_EXPIRY:
+        return cached['df'], False
+
+    client = get_binance_client()
+    ohlcv = client.fetch_ohlcv(symbol, timeframe, limit=limit)
+    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+    df['rsi'] = talib.RSI(df['close'], timeperiod=14)
+    df.dropna(inplace=True)
+    CANDLE_CACHE[cache_key] = {'timestamp': time.time(), 'df': df}
+    return df, True
+
+
+def get_signal_score(symbol, price, ta_score, sentiment, onchain_rpl, recent_data=None):
     """
     Calculate aggregated signal score for trading decisions.
     Formula: 0.4*TA + 0.3*sentiment + 0.3*onchain + 0.2*ML + 0.1*cluster (scaled by volatility).
@@ -97,7 +118,9 @@ def get_signal_score(symbol, price, ta_score, sentiment, onchain_rpl):
         onchain_score = 1 if price > onchain_rpl * 1.05 else -1 if price < onchain_rpl * 0.95 else 0
         score = 0.4 * ta_score + 0.3 * sentiment.score + 0.3 * onchain_score
         # ML prediction (from Redis or direct)
-        recent_data = fetch_historical_data(symbol, '5m', years=0.01).iloc[-60:][['close', 'volume', 'rsi']].values
+        if recent_data is None:
+            df, _ = fetch_recent_candles(symbol)
+            recent_data = df[['close', 'volume', 'rsi']].values
         pred = predict_next_price(st.session_state.get('ml_model'), recent_data[-1]) if 'ml_model' in st.session_state else 0
         if pred > price * 1.005:
             score += 0.2
@@ -154,7 +177,17 @@ async def monitoring_loop():
 
             # Signal score
             ta_score = 1 if price > talib.EMA(pd.Series([price] * 26), timeperiod=12)[-1] else 0  # Mock EMA
-            score = get_signal_score('BTC/USDT', price, ta_score, sentiment, current_rpl)
+            candles, fetched = fetch_recent_candles('BTC/USDT')
+            if fetched:
+                weight_counter += request_weights['fetch_ohlcv']
+            score = get_signal_score(
+                'BTC/USDT',
+                price,
+                ta_score,
+                sentiment,
+                current_rpl,
+                recent_data=candles[['close', 'volume', 'rsi']].values,
+            )
 
             # Execute strategies
             if score > 0.7 and risk.trade == 'yes':
