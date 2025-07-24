@@ -25,7 +25,7 @@ def fetch_sth_rpl(symbol='BTC'):
 
         client = DuneClient(DUNE_API_KEY)
         # Execute query and fetch latest result
-        results = client.execute_query(DUNE_QUERY_ID)
+        client.execute_query(DUNE_QUERY_ID)
         data = client.get_query_results(DUNE_QUERY_ID)
         
         # Assume data structure: extract latest STH RPL

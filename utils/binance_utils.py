@@ -1,5 +1,6 @@
 import ccxt
 import logging
+import asyncio
 from config import BINANCE_API_KEY, BINANCE_API_SECRET
 
 logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')

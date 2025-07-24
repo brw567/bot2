@@ -1,7 +1,5 @@
 import logging
 from utils.grok_utils import get_risk_assessment
-from config import DB_PATH
-import sqlite3
 
 logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
 
