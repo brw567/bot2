@@ -10,7 +10,7 @@ def cleanup():
     """
     Remove HDF5 files older than 30 days from the data/hdf5 directory to manage storage.
 
-    Uses h5py to validate files before deletion, ensuring only valid HDF5 files are removed.
+    Uses h5py to validate files by opening them before deletion, ensuring only valid HDF5 files are removed.
     Logs deleted files and their sizes for traceability.
 
     Notes:
@@ -32,8 +32,8 @@ def cleanup():
                 file_path = os.path.join(HDF5_DIR, file)
                 try:
                     # Validate HDF5 file
-                    with h5py.File(file_path, 'r') as _:
-                        pass  # File is valid if opened successfully
+                    with h5py.File(file_path, "r") as _:
+                        pass
                     file_mtime = os.stat(file_path).st_mtime
                     file_size = os.path.getsize(file_path)
                     if file_mtime < now - retention_seconds:
