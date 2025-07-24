@@ -64,6 +64,13 @@ def init_db():
                        risk TEXT,
                        sentiment TEXT,
                        timestamp REAL)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS monitor_pairs
+                      (pair TEXT PRIMARY KEY)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS pair_metrics
+                      (pair TEXT PRIMARY KEY,
+                       trade_count INTEGER,
+                       profit REAL,
+                       winrate REAL)''')
     for k, v in DEFAULT_PARAMS.items():
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, str(v)))
     conn.commit()
@@ -94,6 +101,47 @@ def load_trading_pairs():
     if 'BTC/USDT' not in pairs:
         pairs.append('BTC/USDT')
     return pairs
+
+
+def load_monitor_pairs():
+    """Return list of Grok recommended pairs for analytics."""
+    limit = int(load_params().get('auto_pair_limit', 10)) * 5
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT pair FROM monitor_pairs")
+    pairs = [row[0] for row in cursor.fetchall()]
+    if len(pairs) != limit:
+        try:
+            from utils.grok_utils import get_recommended_pairs
+            pairs = get_recommended_pairs(limit)
+            cursor.execute("DELETE FROM monitor_pairs")
+            cursor.executemany("INSERT INTO monitor_pairs (pair) VALUES (?)", [(p,) for p in pairs])
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Failed to refresh monitor pairs: {e}")
+    conn.close()
+    return pairs
+
+
+def update_pair_metrics():
+    """Aggregate trading metrics per pair for analytics."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        df = pd.read_sql("SELECT symbol, profit FROM trades", conn)
+        metrics = (
+            df.groupby('symbol')['profit']
+            .agg(trade_count='count', profit='sum', winrate=lambda x: (x > 0).mean())
+        )
+        cursor = conn.cursor()
+        for symbol, row in metrics.iterrows():
+            cursor.execute(
+                "INSERT OR REPLACE INTO pair_metrics (pair, trade_count, profit, winrate) VALUES (?, ?, ?, ?)",
+                (symbol, int(row.trade_count), float(row.profit), float(row.winrate)),
+            )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Update metrics failed: {e}")
 
 
 # Simple in-memory cache for recent OHLCV data
@@ -209,7 +257,10 @@ async def monitoring_loop():
                 continue
 
             client = get_binance_client()
-            pairs = load_trading_pairs()
+            pair_limit = int(load_params().get('auto_pair_limit', 10))
+            trading_pairs = load_trading_pairs()[:pair_limit]
+            monitor_pairs = load_monitor_pairs()
+            pairs = trading_pairs + [p for p in monitor_pairs if p not in trading_pairs]
             fallback_info = {}
             symbols = [p.split('/')[0] for p in pairs]
 
@@ -232,6 +283,7 @@ async def monitoring_loop():
             sentiments = await get_multi_sentiment_analysis(symbols)
 
             for pair in pairs:
+                trade_enabled = pair in trading_pairs
                 base = pair.split('/')[0]
                 sentiment = sentiments.get(base, SentimentResponse(sentiment='neutral', score=0.0, details='Missing'))
                 cached = load_cached_indicators(pair)
@@ -292,12 +344,13 @@ async def monitoring_loop():
                     logging.info(f"[fallback] Used backup data for {pair}")
                 fallback_info[pair] = fallback_used
 
-                # Execute strategies
-                if score > 0.7 and risk.trade == 'yes':
-                    GridStrategy().run(pair, price)
-                    ArbitrageStrategy().run(pair, f"{pair}:USDT")
-                    weight_counter += request_weights['create_order']
-                MEVStrategy().detect_mev(pair)
+                # Execute strategies only on configured trading pairs
+                if trade_enabled:
+                    if score > 0.7 and risk.trade == 'yes':
+                        GridStrategy().run(pair, price)
+                        ArbitrageStrategy().run(pair, f"{pair}:USDT")
+                        weight_counter += request_weights['create_order']
+                    MEVStrategy().detect_mev(pair)
 
                 if not fallback_used:
                     save_cached_indicators(pair, price, vol, candles, risk, sentiment)
@@ -311,6 +364,7 @@ async def monitoring_loop():
             conn.commit()
             conn.close()
             r.publish('winrate_updates', json.dumps({'winrate': winrate}))
+            update_pair_metrics()
             st.session_state['fallback_pairs'] = fallback_info
 
             await asyncio.sleep(5)
@@ -412,6 +466,7 @@ if __name__ == '__main__':
         st.subheader('Risk Management', help="Adjust risk parameters. Locked in auto mode.")
         risk_per_trade = st.slider('Risk per Trade', 0.005, 0.02, params.get('risk_per_trade', 0.01), disabled=disabled, help="Fraction of capital to risk per trade")
         # ... add more sliders for all risk/trading params
+        pair_limit = st.number_input('Auto-Trade Pair Limit', 1, 50, params.get('auto_pair_limit', 10), disabled=disabled)
         if not disabled:
             rec_risk = get_grok_recommendation(selected_pair, 'risk_per_trade')
             col1, col2, col3 = st.columns(3)
@@ -420,7 +475,11 @@ if __name__ == '__main__':
             with col2:
                 if st.button('Apply'):
                     # Update actual
-                    pass
+                    conn = sqlite3.connect(DB_PATH)
+                    conn.execute("UPDATE settings SET value=? WHERE key='auto_pair_limit'", (pair_limit,))
+                    conn.commit()
+                    conn.close()
+                    st.success('Settings updated')
             with col3:
                 if st.button('Ignore'):
                     pass
