@@ -97,12 +97,13 @@ def train_model(symbol='BTC/USDT', epochs=5):
     Note: Uses 80/20 train/validation split; checks for overfitting (val_loss < 1.2*train_loss).
     """
     try:
-        model = PriceLSTM(input_size=3)  # Close, volume, RSI
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-        criterion = nn.MSELoss()
-
+        # Use all available features for the model
         df = fetch_historical_data(symbol, years=1)
         features = df[['close', 'volume', 'rsi']].values
+        input_size = features.shape[1]
+        model = PriceLSTM(input_size=input_size)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+        criterion = nn.MSELoss()
         # Compute and store training mean/std for later inference
         global TRAIN_MEAN, TRAIN_STD
         TRAIN_MEAN = features.mean(0)
@@ -110,11 +111,12 @@ def train_model(symbol='BTC/USDT', epochs=5):
         logging.info(f"Training data mean: {TRAIN_MEAN}, std: {TRAIN_STD}")
         features = (features - TRAIN_MEAN) / TRAIN_STD  # Normalize using train stats
         split = int(0.8 * len(features))
-        train_X, val_X = features[:split, :-1], features[split:, :-1]
-        train_y, val_y = features[1:split+1, 0], features[split+1:, 0]
-        train_X = torch.tensor(train_X.reshape(-1, 1, 3), dtype=torch.float32)
+        # Use all features for X and shift targets by one step
+        train_X, val_X = features[:split-1], features[split:-1]
+        train_y, val_y = features[1:split, 0], features[split+1:, 0]
+        train_X = torch.tensor(train_X.reshape(-1, 1, input_size), dtype=torch.float32)
         train_y = torch.tensor(train_y.reshape(-1, 1), dtype=torch.float32)
-        val_X = torch.tensor(val_X.reshape(-1, 1, 3), dtype=torch.float32)
+        val_X = torch.tensor(val_X.reshape(-1, 1, input_size), dtype=torch.float32)
         val_y = torch.tensor(val_y.reshape(-1, 1), dtype=torch.float32)
 
         for epoch in range(epochs):
