@@ -2,7 +2,7 @@
 
 This guide details the full deployment process for the Ultimate Crypto Scalping Bot on a fresh Ubuntu Server 22.04 LTS instance (e.g., AWS EC2, DigitalOcean, or bare metal). It covers OS configuration, user creation, SSH setup, folder structure, Linux packages, Git configuration, Redis deployment, and bot deployment. Run commands as root or with sudo where noted. For security, a non-root user is used for bot operations.
 
-1. OS Configuration
+## 1. OS Configuration
 
 Update and upgrade system packages to ensure a secure base:
 ```sudo apt update && sudo apt upgrade -y```
@@ -14,7 +14,7 @@ Install essential tools:
 ```sudo apt install -y curl wget unzip vim net-tools```
 
 
-2. Creating a User
+## 2. Creating a User
 
 Create a dedicated user `botuser` to isolate bot operations:
 ```sudo adduser botuser```
@@ -26,7 +26,7 @@ Switch to the new user:
 ```su - botuser```
 
 
-3. Configuring SSH
+## 3. Configuring SSH
 
 Generate an SSH key pair on your local machine:
 ```ssh-keygen -t ed25519 -C "your_email@example.com"```
@@ -43,7 +43,8 @@ Set PasswordAuthentication no and PubkeyAuthentication yes. Restart SSH:
 Test SSH from local machine:
 ```ssh botuser@server_ip```
 
-4. Initial Fixing Folder Structure
+
+## 4. Initial Fixing Folder Structure
 
 Create the project directory:
 ```
@@ -58,7 +59,8 @@ mkdir -p data/hdf5 logs
 chmod 755 data data/hdf5 logs
 ```
 
-5. Deployment of Required Linux Packages
+
+## 5. Deployment of Required Linux Packages
 
 Install Python 3.12, Git, Redis, and dependencies:
 ```
@@ -68,9 +70,10 @@ sudo apt update
 sudo apt install -y python3.12 python3.12-venv python3.12-dev build-essential libssl-dev libffi-dev libpq-dev git redis-server
 ```
 
-**Note:** ``ta-lib`` may require additional binaries; see TA-Lib install guide if errors occur.
+**Note:** `ta-lib` may require additional binaries; see TA-Lib install guide if errors occur.
 
-6. Git Configuration
+
+## 6. Git Configuration
 
 Configure Git:
 ```
@@ -88,7 +91,8 @@ Secure Git by disabling credential storage:
 git config --global credential.helper ""
 ```
 
-7. Redis DB Deployment and Configuration
+
+## 7. Redis DB Deployment and Configuration
 
 Start and enable Redis:
 ```
@@ -101,30 +105,20 @@ Configure Redis for low-latency pub/sub (edit /etc/redis/redis.conf):
 sudo vim /etc/redis/redis.conf
 ```
 Set:
-
-
-
-
-
+````
 bind 127.0.0.1 (local only for security)
-
-
-
 maxmemory 256mb (limit for bot scale)
-
-
-
 maxmemory-policy allkeys-lru (evict least used)
+````
 
 Restart Redis:
-
-sudo systemctl restart redis-server
+```sudo systemctl restart redis-server```
 
 Test Redis:
+```redis-cli ping  # Should return "PONG"```
 
-redis-cli ping  # Should return "PONG"
 
-8. Bot Deployment
+## 8. Bot Deployment
 
 Create and activate virtual environment:
 
