@@ -32,6 +32,7 @@ async def send_notification(message):
 
     Note: Sends to 'me' (self) for simplicity; adjust for bot or group in prod.
     """
+    client = None
     try:
         client = await get_client()
         await client.start()
@@ -40,7 +41,8 @@ async def send_notification(message):
     except Exception as e:
         logging.error(f"Telegram notification failed: {e}")
     finally:
-        await client.disconnect()
+        if client:
+            await client.disconnect()
 
 async def fetch_channel_messages(channel, limit=100):
     """
@@ -56,6 +58,7 @@ async def fetch_channel_messages(channel, limit=100):
     Note: Uses timestamp filtering via DB to fetch only new messages since last pull,
     addressing immediate task for extended sentiment fetch. Stores last pull time in DB.
     """
+    client = None
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -83,4 +86,5 @@ async def fetch_channel_messages(channel, limit=100):
         logging.error(f"Fetch messages failed for {channel}: {e}")
         return []
     finally:
-        await client.disconnect()
+        if client:
+            await client.disconnect()
