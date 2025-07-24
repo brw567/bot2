@@ -1,0 +1,86 @@
+import logging
+import sqlite3
+import asyncio
+from telethon import TelegramClient, events
+from telethon.sessions import StringSession
+from config import TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION, DB_PATH
+
+logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+
+async def get_client():
+    """
+    Initialize and return a Telethon client for Telegram interactions.
+
+    Returns:
+        TelegramClient: Configured client instance.
+
+    Note: Uses credentials from config.py; StringSession for persistent sessions.
+    """
+    try:
+        client = TelegramClient(StringSession(TELEGRAM_SESSION), TELEGRAM_API_ID, TELEGRAM_API_HASH)
+        return client
+    except Exception as e:
+        logging.error(f"Telegram client initialization failed: {e}")
+        raise
+
+async def send_notification(message):
+    """
+    Send a notification to the configured Telegram user or channel.
+
+    Args:
+        message (str): Message to send.
+
+    Note: Sends to 'me' (self) for simplicity; adjust for bot or group in prod.
+    """
+    try:
+        client = await get_client()
+        await client.start()
+        await client.send_message('me', message)
+        logging.info(f"Notification sent: {message}")
+    except Exception as e:
+        logging.error(f"Telegram notification failed: {e}")
+    finally:
+        await client.disconnect()
+
+async def fetch_channel_messages(channel, limit=100):
+    """
+    Fetch recent messages from a Telegram channel for sentiment analysis.
+
+    Args:
+        channel (str): Telegram channel name (e.g., 'crypto_news_channel').
+        limit (int): Max number of messages to fetch (default 100, per immediate task).
+
+    Returns:
+        list: List of message texts (filtered for non-empty).
+
+    Note: Uses timestamp filtering via DB to fetch only new messages since last pull,
+    addressing immediate task for extended sentiment fetch. Stores last pull time in DB.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key='last_telegram_pull'")
+        last_pull = cursor.fetchone()
+        last_pull_ts = last_pull[0] if last_pull else '1970-01-01'
+        conn.close()
+
+        client = await get_client()
+        await client.start()
+        messages = await client.get_messages(channel, limit=limit, min_id=0, offset_date=last_pull_ts)
+        texts = [msg.text for msg in messages if msg.text and msg.date > last_pull_ts]
+        logging.info(f"Fetched {len(texts)} messages from {channel}")
+
+        # Update last pull timestamp
+        if messages:
+            new_ts = messages[0].date.isoformat()
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_telegram_pull', ?)", (new_ts,))
+            conn.commit()
+            conn.close()
+
+        return texts
+    except Exception as e:
+        logging.error(f"Fetch messages failed for {channel}: {e}")
+        return []
+    finally:
+        await client.disconnect()

@@ -1,0 +1,24 @@
+# Dependencies for Ultimate Crypto Scalping Bot
+# Note: sqlite3 is built-in to Python but listed for clarity
+# Excluded web3, ta, matplotlib, seaborn, openai to avoid redundancy/bloat
+# Install with: pip install -r requirements.txt
+# Ensure Python 3.8+ for compatibility; ta-lib may require external binaries
+
+ccxt==4.4.95                # Exchange API client for Binance trading
+telethon==1.36.0            # Telegram client for notifications and sentiment analysis
+python-dotenv==1.0.1        # Load environment variables from .env
+requests==2.32.3            # HTTP requests for API calls (e.g., Grok)
+ta-lib==0.4.32              # Technical analysis indicators (EMA, RSI)
+sqlite3                     # Built-in database for parameters and trade logs
+streamlit==1.47.0           # Web-based GUI for dashboard and settings
+plotly==5.24.1              # Interactive charts for GUI
+pandas==2.3.1               # Data manipulation for backtesting and analysis
+torch==2.4.1                # ML framework for price predictions (LSTM)
+redis==5.2.0                # Pub/sub messaging for real-time updates
+vectorbt==0.28.0            # Vectorized backtesting for fast strategy optimization
+h5py==3.14.0                # HDF5 storage for historical data
+dune-client==1.7.10         # Simplified Dune API for on-chain metrics (e.g., STH RPL)
+backtrader==1.9.78.123      # Advanced backtesting with broker simulation
+streamlit-aggrid==1.1.7     # Interactive grid tables for trade logs in GUI
+scikit-learn==1.7.1         # Traditional ML for signal clustering
+statsmodels==0.14.5         # Time-series analysis for volatility/forecasting
