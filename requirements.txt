@@ -9,7 +9,6 @@ telethon==1.36.0            # Telegram client for notifications and sentiment an
 python-dotenv==1.0.1        # Load environment variables from .env
 requests==2.32.3            # HTTP requests for API calls (e.g., Grok)
 ta-lib==0.4.32              # Technical analysis indicators (EMA, RSI)
-sqlite3                     # Built-in database for parameters and trade logs
 streamlit==1.47.0           # Web-based GUI for dashboard and settings
 plotly==5.24.1              # Interactive charts for GUI
 pandas==2.3.1               # Data manipulation for backtesting and analysis
