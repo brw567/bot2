@@ -2,7 +2,8 @@ import sqlite3
 import threading
 import time
 import asyncio
-import logging
+from utils.logger import get_logger
+logger = get_logger(__name__)
 import json
 import streamlit as st
 import plotly.graph_objects as go
@@ -24,7 +25,6 @@ from strategies.grid_strategy import GridStrategy
 from strategies.mev_strategy import MEVStrategy
 from backtest import simple_backtest, advanced_backtest, ml_backtest
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
 
 
 # Redis setup for pub/sub
@@ -80,15 +80,23 @@ def get_signal_score(symbol, price, ta_score, sentiment, onchain_rpl):
     try:
         onchain_score = 1 if price > onchain_rpl * 1.05 else -1 if price < onchain_rpl * 0.95 else 0
         score = 0.4 * ta_score + 0.3 * sentiment['score'] + 0.3 * onchain_score
-        # ML prediction (from Redis or direct)
+        # ML prediction using last candle features
         recent_data = fetch_historical_data(symbol, '5m', years=0.01).iloc[-60:][['close', 'volume', 'rsi']].values
-        pred = predict_next_price(st.session_state.get('ml_model'), recent_data[-1]) if 'ml_model' in st.session_state else 0
+        if 'ml_model' in st.session_state:
+            pred = predict_next_price(
+                st.session_state['ml_model'],
+                recent_data[-1],
+                st.session_state['ml_mean'],
+                st.session_state['ml_std'],
+            )
+        else:
+            pred = 0  # No model loaded
         if pred > price * 1.005:
             score += 0.2
         # Placeholder for clustering (via scikit-learn in live)
         return score
     except Exception as e:
-        logging.error(f"Signal score calculation failed: {e}")
+        logger.error(f"Signal score calculation failed: {e}")
         return 0.0
 
 async def monitoring_loop():
@@ -110,7 +118,7 @@ async def monitoring_loop():
                 weight_counter = 0
                 last_reset = time.time()
             if weight_counter > BINANCE_WEIGHT_LIMIT * 0.8:
-                logging.warning("Near API quota; pausing 30s")
+                logger.warning("Near API quota; pausing 30s")
                 await asyncio.sleep(30)
                 continue
 
@@ -123,7 +131,7 @@ async def monitoring_loop():
             # RPL spike check
             current_rpl = fetch_sth_rpl('BTC')
             if current_rpl / prev_rpl > 1.2:
-                logging.info("RPL spike >20%; pausing 30min")
+                logger.info("RPL spike >20%; pausing 30min")
                 await asyncio.sleep(1800)
                 prev_rpl = current_rpl
                 continue
@@ -156,15 +164,18 @@ async def monitoring_loop():
 
             await asyncio.sleep(5)
         except Exception as e:
-            logging.error(f"Monitoring loop error: {e}")
+            logger.error(f"Monitoring loop error: {e}")
             await asyncio.sleep(10)
 
 # GUI
 if __name__ == '__main__':
     init_db()
     params = load_params()
-    logging.info(f"Loaded params: {params}")
-    st.session_state['ml_model'] = train_model()[0]
+    logger.info(f"Loaded params: {params}")
+    model, mean, std, _, _ = train_model()
+    st.session_state['ml_model'] = model
+    st.session_state['ml_mean'] = mean
+    st.session_state['ml_std'] = std
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -173,13 +184,13 @@ if __name__ == '__main__':
     # Sidebar for critical buttons (always visible)
     st.sidebar.title("Controls")
     if st.sidebar.button('Pause Bot'):
-        logging.info("Bot paused")
+        logger.info("Bot paused")
         # Pause logic
     if st.sidebar.button('Resume Bot'):
-        logging.info("Bot resumed")
+        logger.info("Bot resumed")
         # Resume logic
     if st.sidebar.button('Manual Trade'):
-        logging.info("Manual trade triggered")
+        logger.info("Manual trade triggered")
         # Manual trade logic
     auto_mode = st.sidebar.checkbox('Auto Mode')
     st.session_state['auto_mode'] = auto_mode

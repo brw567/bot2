@@ -5,11 +5,12 @@ import vectorbt as vbt
 import backtrader as bt
 from sklearn.cluster import KMeans
 import statsmodels.api as sm
-import logging
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 from config import BINANCE_API_KEY, BINANCE_API_SECRET
 from utils.ml_utils import fetch_historical_data, train_model, predict_next_price
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
 
 def simple_backtest(symbol='BTC/USDT', timeframe='1d', limit=365, fees=0.001, slippage=0.0005):
     """
@@ -65,7 +66,7 @@ def simple_backtest(symbol='BTC/USDT', timeframe='1d', limit=365, fees=0.001, sl
             'cumulative': float(cumulative)
         }
     except Exception as e:
-        logging.error(f"Simple backtest failed for {symbol}: {e}")
+        logger.error(f"Simple backtest failed for {symbol}: {e}")
         return {}
 
 class ScalpingStrategy(bt.Strategy):
@@ -152,7 +153,7 @@ def advanced_backtest(symbol='BTC/USDT', timeframe='1d', limit=365):
             'cumulative': (cerebro.broker.getvalue() - 10000) / 10000
         }
     except Exception as e:
-        logging.error(f"Advanced backtest failed for {symbol}: {e}")
+        logger.error(f"Advanced backtest failed for {symbol}: {e}")
         return {}
 
 def ml_backtest(symbol='BTC/USDT', timeframe='5m', years=1):
@@ -171,9 +172,9 @@ def ml_backtest(symbol='BTC/USDT', timeframe='5m', years=1):
     """
     try:
         # Train ML model with train/validation split
-        model, train_loss, val_loss = train_model(symbol, epochs=5)
+        model, mean, std, train_loss, val_loss = train_model(symbol, epochs=5)
         if val_loss > train_loss * 1.2:  # Overfitting threshold
-            logging.warning(f"Overfitting detected: val_loss={val_loss}, train_loss={train_loss}")
+            logger.warning(f"Overfitting detected: val_loss={val_loss}, train_loss={train_loss}")
             return {
                 'overfitting': True,
                 'train_loss': float(train_loss),
@@ -185,7 +186,7 @@ def ml_backtest(symbol='BTC/USDT', timeframe='5m', years=1):
         predictions = []
         for i in range(len(df) - 60):
             recent = df.iloc[i:i+60][['close', 'volume', 'rsi']].values[-1]
-            pred = predict_next_price(model, recent)
+            pred = predict_next_price(model, recent, mean, std)
             predictions.append(pred)
         df['pred'] = [None] * 60 + predictions
 
@@ -232,5 +233,5 @@ def ml_backtest(symbol='BTC/USDT', timeframe='5m', years=1):
             'val_loss': float(val_loss)
         }
     except Exception as e:
-        logging.error(f"ML backtest failed for {symbol}: {e}")
+        logger.error(f"ML backtest failed for {symbol}: {e}")
         return {}

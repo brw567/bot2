@@ -1,4 +1,4 @@
-import logging
+from utils.logger import get_logger
 import sqlite3
 import pandas as pd
 from config import DB_PATH
@@ -7,7 +7,7 @@ from utils.ccxt_utils import calculate_spread  # No circular: dynamic imports in
 from utils.grok_utils import get_risk_assessment
 from utils.binance_utils import get_binance_client
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+logger = get_logger(__name__)
 
 class ArbitrageStrategy(BaseStrategy):
     """
@@ -48,13 +48,13 @@ class ArbitrageStrategy(BaseStrategy):
             # Risk check via Grok
             risk = get_risk_assessment(symbol_spot, price, vol, 0.65)  # Mock winrate
             if risk.get('trade') != 'yes':
-                logging.info(f"Arbitrage skipped for {symbol_spot}: Risk not approved")
+                logger.info(f"Arbitrage skipped for {symbol_spot}: Risk not approved")
                 return
 
             # Position sizing
             sl, tp = self.get_dynamic_sl_tp(symbol_spot, price, vol)
             if not sl or not tp:
-                logging.info(f"Arbitrage skipped for {symbol_spot}: Invalid SL/TP")
+                logger.info(f"Arbitrage skipped for {symbol_spot}: Invalid SL/TP")
                 return
             size = self.calculate_position_size(price, (price - sl) / price)
 
@@ -63,7 +63,7 @@ class ArbitrageStrategy(BaseStrategy):
                 from utils.binance_utils import execute_trade  # Dynamic import
                 order_buy = execute_trade(symbol_spot, 'buy', size)
                 order_sell = execute_trade(symbol_futures, 'sell', size)
-                logging.info(f"Arbitrage executed: {symbol_spot}/{symbol_futures}, spread={spread:.4f}, size={size:.6f}")
+                logger.info(f"Arbitrage executed: {symbol_spot}/{symbol_futures}, spread={spread:.4f}, size={size:.6f}")
                 # Log trade to DB (mock profit for simplicity)
                 conn = sqlite3.connect(DB_PATH)
                 conn.execute("INSERT INTO trades (symbol, profit, timestamp) VALUES (?, ?, ?)",
@@ -71,4 +71,4 @@ class ArbitrageStrategy(BaseStrategy):
                 conn.commit()
                 conn.close()
         except Exception as e:
-            logging.error(f"Arbitrage run failed for {symbol_spot}: {e}")
+            logger.error(f"Arbitrage run failed for {symbol_spot}: {e}")

@@ -1,4 +1,4 @@
-import logging
+from utils.logger import get_logger
 import asyncio
 import time
 from strategies.base_strategy import BaseStrategy
@@ -8,7 +8,7 @@ from config import DB_PATH
 import sqlite3
 import pandas as pd
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+logger = get_logger(__name__)
 
 class MEVStrategy(BaseStrategy):
     """
@@ -61,7 +61,7 @@ class MEVStrategy(BaseStrategy):
 
             # Check for MEV (rapid buy-sell pattern)
             if imbalance > self.imbalance_threshold or delta > self.delta_threshold:
-                logging.info(f"Potential MEV detected for {symbol}: imbalance={imbalance:.2f}, delta={delta:.2f}")
+                logger.info(f"Potential MEV detected for {symbol}: imbalance={imbalance:.2f}, delta={delta:.2f}")
                 asyncio.run(send_notification(f"Potential sandwich/MEV detected for {symbol}: imbalance={imbalance:.2f}, delta={delta:.2f}"))
                 # Log to DB for audit
                 conn = sqlite3.connect(DB_PATH)
@@ -72,5 +72,5 @@ class MEVStrategy(BaseStrategy):
                 return True
             return False
         except Exception as e:
-            logging.error(f"MEV detection failed for {symbol}: {e}")
+            logger.error(f"MEV detection failed for {symbol}: {e}")
             return False

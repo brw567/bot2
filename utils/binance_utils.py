@@ -1,8 +1,8 @@
 import ccxt
-import logging
+from utils.logger import get_logger
 from config import BINANCE_API_KEY, BINANCE_API_SECRET
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+logger = get_logger(__name__)
 
 def get_binance_client():
     """
@@ -21,7 +21,7 @@ def get_binance_client():
         })
         return client
     except Exception as e:
-        logging.error(f"Binance client initialization failed: {e}")
+        logger.error(f"Binance client initialization failed: {e}")
         raise
 
 def execute_trade(symbol, side, amount, price=None):
@@ -45,7 +45,7 @@ def execute_trade(symbol, side, amount, price=None):
         order_type = 'market' if price is None else 'limit'
         params = {} if price is None else {'price': price}
         order = client.create_order(symbol, order_type, side, amount, params=params)
-        logging.info(f"Trade executed: {symbol}, {side}, amount={amount}, type={order_type}, price={price or 'market'}")
+        logger.info(f"Trade executed: {symbol}, {side}, amount={amount}, type={order_type}, price={price or 'market'}")
         
         # Notify via Telegram
         try:
@@ -54,24 +54,24 @@ def execute_trade(symbol, side, amount, price=None):
                 f"Trade executed: {symbol}, {side}, amount={amount:.6f}, price={price or 'market'}"
             ))
         except Exception as e:
-            logging.error(f"Trade notification failed: {e}")
+            logger.error(f"Trade notification failed: {e}")
 
         return order
     except ccxt.NetworkError as e:
-        logging.warning(f"Network error on trade {symbol}: {e}. Retrying once...")
+        logger.warning(f"Network error on trade {symbol}: {e}. Retrying once...")
         try:
             # Retry once
             client = get_binance_client()
             order = client.create_order(symbol, order_type, side, amount, params=params)
-            logging.info(f"Trade retry successful: {symbol}, {side}, amount={amount}")
+            logger.info(f"Trade retry successful: {symbol}, {side}, amount={amount}")
             from utils.telegram_utils import send_notification
             asyncio.run(send_notification(
                 f"Trade retry executed: {symbol}, {side}, amount={amount:.6f}, price={price or 'market'}"
             ))
             return order
         except Exception as retry_e:
-            logging.error(f"Trade retry failed: {retry_e}")
+            logger.error(f"Trade retry failed: {retry_e}")
             raise
     except Exception as e:
-        logging.error(f"Trade execution failed for {symbol}: {e}")
+        logger.error(f"Trade execution failed for {symbol}: {e}")
         raise
