@@ -45,8 +45,9 @@ class GridStrategy(BaseStrategy):
             ohlcv = client.fetch_ohlcv(symbol, '1m', limit=60)
             df = pd.DataFrame(ohlcv, columns=['ts', 'o', 'h', 'l', 'c', 'v'])
             typ = (df['h'] + df['l'] + df['c']) / 3
-            vwap = (typ * df['v']).cumsum() / df['v'].cumsum().iloc[-1]
-            center = vwap.iloc[-1]
+            # VWAP over the entire hour: sum(typical*vol) / sum(vol)
+            vwap = (typ * df['v']).sum() / df['v'].sum()
+            center = vwap
             logging.info(f"VWAP calculated for {symbol}: {center:.2f}")
 
             # Risk check via Grok

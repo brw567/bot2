@@ -36,7 +36,7 @@ pubsub = r.pubsub()
 pubsub.subscribe('winrate_updates', 'ml_updates')
 
 def redis_subscriber():
-    """Listen for Redis pub/sub messages and update Streamlit session state."""
+    """Listen for Redis pub/sub messages and update Streamlit state."""
     for message in pubsub.listen():
         if message['type'] == 'message':
             channel = message['channel'].decode()
@@ -131,6 +131,9 @@ def update_pair_metrics():
     try:
         conn = sqlite3.connect(DB_PATH)
         df = pd.read_sql("SELECT symbol, profit FROM trades", conn)
+        if df.empty:
+            conn.close()
+            return
         metrics = (
             df.groupby('symbol')['profit']
             .agg(trade_count='count', profit='sum', winrate=lambda x: (x > 0).mean())
