@@ -20,6 +20,10 @@ class SentimentResponse(BaseModel):
     score: float
     details: str  # Added for trustworthiness, per immediate task
 
+class MultiSentimentResponse(BaseModel):
+    """Mapping of symbols to their sentiment response."""
+    __root__: dict[str, SentimentResponse]
+
 class RiskResponse(BaseModel):
     """
     Pydantic model for Grok risk assessment response.
@@ -56,6 +60,11 @@ def grok_api_call(prompt):
             validated = SentimentResponse(**result)
             logging.info(f"Grok sentiment response: {validated.dict()}")
             return validated
+        elif prompt.get('task') == 'multi_sentiment':
+            validated = MultiSentimentResponse(__root__=
+                                               {k: SentimentResponse(**v) for k, v in result.items()})
+            logging.info(f"Grok multi-sentiment response: {validated.__root__}")
+            return validated.__root__
         elif prompt.get('task') == 'risk_assessment':
             validated = RiskResponse(**result)
             logging.info(f"Grok risk response: {validated.dict()}")
@@ -64,6 +73,8 @@ def grok_api_call(prompt):
             raise ValueError(f"Unknown task: {prompt.get('task')}")
     except (requests.RequestException, json.JSONDecodeError, ValidationError) as e:
         logging.error(f"Grok API call failed: {e}")
+        if prompt.get('task') == 'multi_sentiment':
+            return {}
         return SentimentResponse(sentiment="neutral", score=0.0, details="Validation failed") if prompt.get('task') == 'sentiment_analysis' else RiskResponse(trade="no", sl_mult=0.0, tp_mult=0.0, details="Validation failed")
 
 async def get_sentiment_analysis(symbol):
@@ -95,6 +106,37 @@ async def get_sentiment_analysis(symbol):
     except Exception as e:
         logging.error(f"Sentiment analysis failed for {symbol}: {e}")
         return SentimentResponse(sentiment="neutral", score=0.0, details="Error in processing")
+
+
+async def get_multi_sentiment_analysis(symbols):
+    """Fetch sentiment analysis for multiple symbols in a single Grok call."""
+    try:
+        channels = st.session_state.get('channels', ['crypto_news_channel'])
+        messages = []
+        for channel in channels:
+            channel_msgs = await fetch_channel_messages(channel, limit=100)
+            messages.extend(channel_msgs)
+        prompt = {
+            "task": "multi_sentiment",
+            "symbols": symbols,
+            "messages": ' '.join(messages[:20]),
+            "output_schema": {
+                "symbol": "str",
+                "sentiment": "positive/negative/neutral",
+                "score": "float",
+                "details": "str"
+            }
+        }
+        result = grok_api_call(prompt)
+        if not isinstance(result, dict):
+            raise ValueError("Invalid response format")
+        missing = [s for s in symbols if s not in result]
+        if missing:
+            raise ValueError(f"Missing sentiment data for {', '.join(missing)}")
+        return result
+    except Exception as e:
+        logging.error(f"Multi-sentiment analysis failed: {e}")
+        return {sym: SentimentResponse(sentiment='neutral', score=0.0, details='Error') for sym in symbols}
 
 def get_risk_assessment(symbol, price, vol, winrate):
     """

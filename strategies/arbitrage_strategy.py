@@ -47,7 +47,7 @@ class ArbitrageStrategy(BaseStrategy):
 
             # Risk check via Grok
             risk = get_risk_assessment(symbol_spot, price, vol, 0.65)  # Mock winrate
-            if risk.get('trade') != 'yes':
+            if risk.trade != 'yes':
                 logging.info(f"Arbitrage skipped for {symbol_spot}: Risk not approved")
                 return
 

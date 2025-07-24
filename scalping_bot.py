@@ -14,8 +14,10 @@ from config import DB_PATH, DEFAULT_PARAMS, REDIS_HOST, REDIS_PORT, REDIS_DB, BI
 from utils.binance_utils import get_binance_client
 from utils.grok_utils import (
     get_sentiment_analysis,
+    get_multi_sentiment_analysis,
     get_risk_assessment,
     get_grok_recommendation,
+    SentimentResponse,
 )
 from utils.onchain_utils import fetch_sth_rpl
 from utils.ml_utils import predict_next_price, train_model, fetch_historical_data
@@ -71,6 +73,20 @@ def load_params(pair=None):
     return params
 
 
+def load_trading_pairs():
+    """Return list of trading pairs from DB or default."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT pair FROM pair_settings")
+    pairs = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    if not pairs:
+        pairs = ['BTC/USDT', 'ETH/USDT']
+    if 'BTC/USDT' not in pairs:
+        pairs.append('BTC/USDT')
+    return pairs
+
+
 def get_signal_score(symbol, price, ta_score, sentiment, onchain_rpl):
     """
     Calculate aggregated signal score for trading decisions.
@@ -79,7 +95,7 @@ def get_signal_score(symbol, price, ta_score, sentiment, onchain_rpl):
     """
     try:
         onchain_score = 1 if price > onchain_rpl * 1.05 else -1 if price < onchain_rpl * 0.95 else 0
-        score = 0.4 * ta_score + 0.3 * sentiment['score'] + 0.3 * onchain_score
+        score = 0.4 * ta_score + 0.3 * sentiment.score + 0.3 * onchain_score
         # ML prediction (from Redis or direct)
         recent_data = fetch_historical_data(symbol, '5m', years=0.01).iloc[-60:][['close', 'volume', 'rsi']].values
         pred = predict_next_price(st.session_state.get('ml_model'), recent_data[-1]) if 'ml_model' in st.session_state else 0
@@ -129,8 +145,11 @@ async def monitoring_loop():
                 continue
             prev_rpl = current_rpl
 
-            # Sentiment and risk
-            sentiment = get_sentiment_analysis('BTC')
+            # Sentiment and risk for BTC and other pairs
+            pairs = load_trading_pairs()
+            symbols = [p.split('/')[0] for p in pairs]
+            sentiments = await get_multi_sentiment_analysis(symbols)
+            sentiment = sentiments.get('BTC', SentimentResponse(sentiment='neutral', score=0.0, details='Missing'))
             risk = get_risk_assessment('BTC/USDT', price, vol, st.session_state.get('winrate', 0.65))
 
             # Signal score
@@ -138,7 +157,7 @@ async def monitoring_loop():
             score = get_signal_score('BTC/USDT', price, ta_score, sentiment, current_rpl)
 
             # Execute strategies
-            if score > 0.7 and risk.get('trade') == 'yes':
+            if score > 0.7 and risk.trade == 'yes':
                 GridStrategy().run('BTC/USDT', price)
                 ArbitrageStrategy().run('BTC/USDT', 'BTC/USDT:USDT')
                 weight_counter += request_weights['create_order']
