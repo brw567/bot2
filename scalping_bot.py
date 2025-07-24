@@ -154,10 +154,14 @@ async def monitoring_loop():
                 continue
 
             client = get_binance_client()
-            ticker = client.fetch_ticker('BTC/USDT')
+            pairs = load_trading_pairs()
+            symbols = [p.split('/')[0] for p in pairs]
+
+            # Fetch BTC data for RPL checks and as fallback for unsupported pairs
+            btc_ticker = client.fetch_ticker('BTC/USDT')
             weight_counter += request_weights['fetch_ticker']
-            price = ticker['last']
-            vol = (ticker['high'] - ticker['low']) / ticker['low']  # Simple volatility
+            btc_price = btc_ticker['last']
+            btc_vol = (btc_ticker['high'] - btc_ticker['low']) / btc_ticker['low']  # Simple volatility
 
             # RPL spike check
             current_rpl = fetch_sth_rpl('BTC')
@@ -168,33 +172,54 @@ async def monitoring_loop():
                 continue
             prev_rpl = current_rpl
 
-            # Sentiment and risk for BTC and other pairs
-            pairs = load_trading_pairs()
-            symbols = [p.split('/')[0] for p in pairs]
+            # Sentiment for all pairs
             sentiments = await get_multi_sentiment_analysis(symbols)
-            sentiment = sentiments.get('BTC', SentimentResponse(sentiment='neutral', score=0.0, details='Missing'))
-            risk = get_risk_assessment('BTC/USDT', price, vol, st.session_state.get('winrate', 0.65))
 
-            # Signal score
-            ta_score = 1 if price > talib.EMA(pd.Series([price] * 26), timeperiod=12)[-1] else 0  # Mock EMA
-            candles, fetched = fetch_recent_candles('BTC/USDT')
-            if fetched:
-                weight_counter += request_weights['fetch_ohlcv']
-            score = get_signal_score(
-                'BTC/USDT',
-                price,
-                ta_score,
-                sentiment,
-                current_rpl,
-                recent_data=candles[['close', 'volume', 'rsi']].values,
-            )
+            for pair in pairs:
+                base = pair.split('/')[0]
+                sentiment = sentiments.get(base, SentimentResponse(sentiment='neutral', score=0.0, details='Missing'))
 
-            # Execute strategies
-            if score > 0.7 and risk.trade == 'yes':
-                GridStrategy().run('BTC/USDT', price)
-                ArbitrageStrategy().run('BTC/USDT', 'BTC/USDT:USDT')
-                weight_counter += request_weights['create_order']
-            MEVStrategy().detect_mev('BTC/USDT')
+                # Fetch ticker; fall back to BTC data if unsupported
+                try:
+                    ticker = client.fetch_ticker(pair)
+                    weight_counter += request_weights['fetch_ticker']
+                    price = ticker['last']
+                    vol = (ticker['high'] - ticker['low']) / ticker['low']
+                except Exception as e:
+                    logging.warning(f"{pair} not supported by Binance: {e}. Using BTC/USDT metrics")
+                    price = btc_price
+                    vol = btc_vol
+
+                # Risk and TA
+                risk = get_risk_assessment(pair, price, vol, st.session_state.get('winrate', 0.65))
+                ta_score = 1 if price > talib.EMA(pd.Series([price] * 26), timeperiod=12)[-1] else 0
+
+                # Candle data with fallback
+                try:
+                    candles, fetched = fetch_recent_candles(pair)
+                    if fetched:
+                        weight_counter += request_weights['fetch_ohlcv']
+                except Exception as e:
+                    logging.warning(f"OHLCV fetch failed for {pair}: {e}. Using BTC/USDT cache")
+                    candles, fetched = fetch_recent_candles('BTC/USDT')
+                    if fetched:
+                        weight_counter += request_weights['fetch_ohlcv']
+
+                score = get_signal_score(
+                    pair,
+                    price,
+                    ta_score,
+                    sentiment,
+                    current_rpl,
+                    recent_data=candles[['close', 'volume', 'rsi']].values,
+                )
+
+                # Execute strategies
+                if score > 0.7 and risk.trade == 'yes':
+                    GridStrategy().run(pair, price)
+                    ArbitrageStrategy().run(pair, f"{pair}:USDT")
+                    weight_counter += request_weights['create_order']
+                MEVStrategy().detect_mev(pair)
 
             # Update winrate
             conn = sqlite3.connect(DB_PATH)
