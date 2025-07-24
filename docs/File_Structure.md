@@ -10,11 +10,11 @@ This document outlines the file structure of the Ultimate Crypto Scalping Bot pr
 ├── data                      # Directory for runtime data
 │   └── hdf5                  # Subdirectory for historical HDF5 files (generated at runtime)
 ├── docs                      # Directory for project documentation
-│   ├── Developer Guide.md    # Developer guide with code structure and contribution
+│   ├── Developer_Guide.md    # Developer guide with code structure and contribution
 │   ├── Install Guide.md      # Extended installation guide for Ubuntu
 │   ├── Ops Guide.md          # Operations guide for deployment and maintenance
 │   ├── README.md             # Project overview and summary
-│   ├── User Guide.md         # User guide for setup and usage
+│   ├── User_Guide.md         # User guide for setup and usage
 │   └── File Structure.md     # Structure of the files
 ├── install.sh                # Setup script for dependencies, DB init, and Telethon session
 ├── requirements.txt          # List of Python dependencies with versions

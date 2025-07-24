@@ -46,6 +46,7 @@ DEFAULT_PARAMS = {
     'win_rate_threshold': 0.6,  # Minimum winrate to continue trading
     'max_consec_losses': 3,     # Pause after 3 consecutive losses
     'slippage_tolerance': 0.001,  # Max slippage (0.1%) for trade execution
+    'risk_per_trade': 0.01,
     'grok_timeout': GROK_TIMEOUT,
     'auto_pair_limit': 10,  # Number of pairs to auto-trade (monitor 5x for analytics)
 }

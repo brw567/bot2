@@ -58,7 +58,7 @@ class GridStrategy(BaseStrategy):
                 return
 
             # Position sizing
-            size = self.calculate_position_size(center, (center - sl) / center)
+            size = self.calculate_position_size(center, (center - sl) / center, vol=vol)
             if size <= 0:
                 logging.info(f"Grid skipped for {symbol}: Invalid position size")
                 return

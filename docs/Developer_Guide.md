@@ -10,6 +10,7 @@
 2. Develop: Use venv, test with `backtest.py`.
 3. Test: Unit (e.g., spread calc), functional (async loop), acceptance (GUI signals).
 4. PR: Include changes, tests.
+   - Run `pytest` before pushing changes.
 
 ## Key Components
 - Signals: `get_signal_score` in scalping_bot.py (weighted formula).

@@ -10,6 +10,9 @@ The Ultimate Crypto Scalping Bot is an advanced trading tool designed for high-f
 - User-friendly GUI and mobile alerts.
 - Backup price fetch from Grok when Binance fails (UI shows yellow highlight).
 - Grok recommends additional pairs, monitoring 5x the configured amount for analytics.
+- Per-pair settings with DB persistence and AgGrid editing.
+- Interactive charts and sidebar controls remain visible on all pages.
+- Unit tests via `pytest` ensure core logic like volatility scaling works.
 
 ### Cons
 - Dependency on APIs (Binance, Grok, Dune, Telegram)—downtime risks.
@@ -31,8 +34,8 @@ The Ultimate Crypto Scalping Bot is an advanced trading tool designed for high-f
 - Config: config.py (.env loading).
 
 ### Documentation Structure
-- [User Guide.md](docs/User%20Guide.md): Setup, usage, GUI.
-- [Developer Guide.md](docs/Developer%20Guide.md): Code structure, contribution, testing.
+- [User_Guide.md](docs/User_Guide.md): Setup, usage, GUI.
+- [Developer_Guide.md](docs/Developer_Guide.md): Code structure, contribution, testing.
 - [Ops Guide.md](docs/Ops%20Guide.md): Deployment, monitoring, maintenance.
 - [Install Guide.md](docs/Install%20Guide.md): Revised setup with Telethon init.
 
@@ -41,6 +44,7 @@ Run `./install.sh` to initialize. See Install Guide.md for details.
 
 ### Contribution
 Fork repo, create feature branch, PR with tests.
+Run `pytest` before submitting a pull request.
 
 ### License
 MIT

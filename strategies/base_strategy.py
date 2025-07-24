@@ -23,7 +23,16 @@ class BaseStrategy:
         self.capital = capital
         self.risk_per_trade = risk_per_trade
 
-    def calculate_position_size(self, price, sl_distance, winrate=0.6):
+    def scale_by_volatility(self, size, vol):
+        """Scale position size based on market volatility."""
+        try:
+            factor = 1 / (1 + max(vol, 0) * 10)
+            return size * factor
+        except Exception as e:
+            logging.error(f"Volatility scaling failed: {e}")
+            return size
+
+    def calculate_position_size(self, price, sl_distance, winrate=0.6, vol=0.0):
         """
         Calculate position size using Kelly criterion approximation.
 
@@ -45,6 +54,7 @@ class BaseStrategy:
             kelly = winrate - (1 - winrate) / r_ratio
             risk_amount = self.capital * self.risk_per_trade * kelly
             size = risk_amount / (price * sl_distance)
+            size = self.scale_by_volatility(size, vol)
             max_size = self.capital / price * 0.2  # Max 20% exposure per Trader
             final_size = min(size, max_size)
             if final_size <= 0:

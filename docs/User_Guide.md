@@ -11,8 +11,9 @@
 - GUI Tabs:
   - Dashboard: Real-time charts, trade log (aggrid sortable), live metrics (winrate, Sharpe).
   - Backtest: Select mode (simple/vectorbt, advanced/backtrader, ML), run sims.
-  - Settings: Select Telegram channels, adjust params (risk per trade) and set the auto-trade pair limit.
-- Telegram: Notifications for trades/MEV; sentiment from selected channels.
+  - Settings: Select Telegram channels, adjust params, and manage per-pair settings via AgGrid.
+  - Sidebar controls remain visible for quick pause or manual trades.
+  - Telegram: Notifications for trades/MEV; sentiment from selected channels.
 
 ## Features
 - Strategies: Arbitrage (spread >0.2%), grid (VWAP-centered), MEV detection (order book snapshots).

@@ -91,6 +91,24 @@ def load_params(pair=None):
     conn.close()
     return params
 
+def save_params(pair, params):
+    """Save parameters globally or per pair."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    if pair:
+        cursor.execute("DELETE FROM pair_settings WHERE pair=?", (pair,))
+        cursor.executemany(
+            "INSERT INTO pair_settings (pair, key, value) VALUES (?, ?, ?)",
+            [(pair, k, str(v)) for k, v in params.items()],
+        )
+    else:
+        for k, v in params.items():
+            cursor.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (k, str(v))
+            )
+    conn.commit()
+    conn.close()
+
 
 def load_trading_pairs():
     """Return list of trading pairs from DB or default."""
@@ -392,6 +410,7 @@ if __name__ == '__main__':
 
     # Sidebar for critical buttons (always visible)
     st.sidebar.title("Controls")
+    st.sidebar.markdown("Use buttons below to control the bot.")
     if st.sidebar.button('Pause Bot'):
         logging.info("Bot paused")
         # Pause logic
@@ -401,7 +420,7 @@ if __name__ == '__main__':
     if st.sidebar.button('Manual Trade'):
         logging.info("Manual trade triggered")
         # Manual trade logic
-    auto_mode = st.sidebar.checkbox('Auto Mode')
+    auto_mode = st.sidebar.checkbox('Auto Mode', help='Lock settings when enabled.')
     st.session_state['auto_mode'] = auto_mode
 
     st.title('Ultimate Crypto Scalping Bot')
@@ -424,7 +443,7 @@ if __name__ == '__main__':
                 )
             ]
         )
-        fig.update_layout(xaxis_rangeslider_visible=True, dragmode='zoom')  # Live interaction
+        fig.update_layout(xaxis_rangeslider_visible=True, dragmode='zoom', hovermode='x unified')  # Live interaction
         st.plotly_chart(fig, use_container_width=True)
 
         st.subheader('Trade Log', help="Sortable/filterable table of trades. Use filters for analysis.")
@@ -469,33 +488,37 @@ if __name__ == '__main__':
             params = load_params(selected_pair)
         disabled = st.session_state.get('auto_mode', False)
 
-        # Risk and trading params
         st.subheader('Risk Management', help="Adjust risk parameters. Locked in auto mode.")
-        risk_per_trade = st.slider('Risk per Trade', 0.005, 0.02, params.get('risk_per_trade', 0.01), disabled=disabled, help="Fraction of capital to risk per trade")
-        # ... add more sliders for all risk/trading params
-        pair_limit = st.number_input('Auto-Trade Pair Limit', 1, 50, params.get('auto_pair_limit', 10), disabled=disabled)
+        param_df = pd.DataFrame([
+            {'Parameter': k, 'Value': v} for k, v in params.items()
+        ])
+        gb = GridOptionsBuilder.from_dataframe(param_df)
+        gb.configure_default_column(editable=not disabled)
+        grid = AgGrid(param_df, gridOptions=gb.build(), height=200)
+
         if not disabled:
             rec_risk = get_grok_recommendation(selected_pair, 'risk_per_trade')
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric('Recommended', rec_risk)
             with col2:
-                if st.button('Apply'):
-                    # Update actual
-                    conn = sqlite3.connect(DB_PATH)
-                    conn.execute("UPDATE settings SET value=? WHERE key='auto_pair_limit'", (pair_limit,))
-                    conn.commit()
-                    conn.close()
+                if st.button('Apply All'):
+                    updated = {row['Parameter']: row['Value'] for row in grid['data']}
+                    updated['risk_per_trade'] = rec_risk
+                    save_params(None if selected_pair == 'Global' else selected_pair, updated)
                     st.success('Settings updated')
             with col3:
-                if st.button('Ignore'):
-                    pass
+                st.button('Ignore')
+        if st.button('Save Parameters', disabled=disabled):
+            updated = {row['Parameter']: row['Value'] for row in grid['data']}
+            save_params(None if selected_pair == 'Global' else selected_pair, updated)
+            st.success('Settings updated')
 
         st.subheader('Telegram Configuration', help="Full Telegram setup, including channels.")
         telegram_token = st.text_input('Telegram Token', type='password', disabled=disabled)
         telegram_api_id = st.text_input('Telegram API ID', disabled=disabled)
         telegram_api_hash = st.text_input('Telegram API Hash', type='password', disabled=disabled)
-        telegram_session = st.text_input('Telegram Session String', disabled=disabled)
+        telegram_session = st.text_input('Telegram Session String', type='password', disabled=disabled)
         channels = st.multiselect('Select Channels', ['crypto_news_channel', 'other_channel'], default=st.session_state.get('channels', []))
         st.session_state['channels'] = channels
         if st.button('Save Telegram Config', disabled=disabled):
