@@ -44,9 +44,19 @@ def grok_api_call(prompt):
     Instructs Grok to return only JSON matching schema for reliability.
     """
     try:
-        headers = {'Authorization': f'Bearer {GROK_API_KEY}', 'Content-Type': 'application/json'}
-        prompt['instructions'] = "Output ONLY valid JSON matching the provided schema. Include details explaining reasoning."
-        data = {'model': 'grok-beta', 'messages': [{'role': 'user', 'content': json.dumps(prompt)}]}
+        headers = {
+            'Authorization': f'Bearer {GROK_API_KEY}',
+            'Content-Type': 'application/json',
+        }
+        prompt['instructions'] = (
+            "Output ONLY valid JSON matching the provided schema. Include details explaining reasoning."
+        )
+        data = {
+            'model': 'grok-beta',
+            'messages': [{'role': 'user', 'content': json.dumps(prompt)}],
+        }
+        # Log only task name to avoid leaking sensitive data
+        logging.info(f"Calling Grok for task: {prompt.get('task')}")
         response = requests.post(GROK_API_URL, headers=headers, json=data)
         response.raise_for_status()
         result = json.loads(response.json()['choices'][0]['message']['content'])

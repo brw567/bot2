@@ -100,13 +100,16 @@ def train_model(symbol='BTC/USDT', epochs=5):
         df = fetch_historical_data(symbol, years=1)
         features = df[['close', 'volume', 'rsi']].values
         features = (features - features.mean(0)) / features.std(0)  # Normalize
-        split = int(0.8 * len(features))
-        train_X, val_X = features[:split, :-1], features[split:, :-1]
-        train_y, val_y = features[1:split+1, 0], features[split+1:, 0]
-        train_X = torch.tensor(train_X.reshape(-1, 1, 3), dtype=torch.float32)
-        train_y = torch.tensor(train_y.reshape(-1, 1), dtype=torch.float32)
-        val_X = torch.tensor(val_X.reshape(-1, 1, 3), dtype=torch.float32)
-        val_y = torch.tensor(val_y.reshape(-1, 1), dtype=torch.float32)
+
+        # X are current features, y is next close price
+        X = features[:-1]
+        y = features[1:, 0]
+        split = int(0.8 * len(X))
+
+        train_X = torch.tensor(X[:split].reshape(-1, 1, 3), dtype=torch.float32)
+        train_y = torch.tensor(y[:split].reshape(-1, 1), dtype=torch.float32)
+        val_X = torch.tensor(X[split:].reshape(-1, 1, 3), dtype=torch.float32)
+        val_y = torch.tensor(y[split:].reshape(-1, 1), dtype=torch.float32)
 
         for epoch in range(epochs):
             optimizer.zero_grad()

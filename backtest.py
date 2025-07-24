@@ -97,8 +97,7 @@ class ScalpingStrategy(bt.Strategy):
         })
         kmeans = KMeans(n_clusters=2).fit(data)
         cluster = kmeans.predict([data.iloc[-1]])[0]
-        # Mock GARCH volatility (fitted externally for simplicity)
-        vol = 0.02  # Placeholder; integrate statsmodels in live
+        # Placeholder volatility value; integrate statsmodels in live
 
         if self.ema12[0] > self.ema26[0] and self.rsi[0] < 70 and cluster == 1:
             size = self.broker.getcash() * 0.01 / self.data.close[0]  # 1% risk
