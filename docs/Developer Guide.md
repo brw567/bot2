@@ -20,5 +20,6 @@
 
 ## Debugging
 - Logs: bot.log (signals, errors).
+- Fallback messages: '[fallback]' entries indicate Grok price used.
 - Circular Fix: Dynamic imports (e.g., in ccxt_utils.py).
 - Cleanup: HDF5 script with h5py validation.

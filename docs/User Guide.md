@@ -18,6 +18,7 @@
 - Strategies: Arbitrage (spread >0.2%), grid (VWAP-centered), MEV detection (order book snapshots).
 - Risk: Dynamic SL/TP, Kelly sizing (<1% risk/trade).
 - Pauses: RPL spikes (>20%), quotas (>80% limit), drawdowns.
+- Fallback prices from Grok shown in yellow if Binance data fails.
 
 ## Troubleshooting
 - API errors: Check keys in `.env`.

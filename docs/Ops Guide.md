@@ -9,6 +9,7 @@
 - Quotas: BINANCE_WEIGHT_LIMIT monitoring in scalping_bot.py (pause >80%).
 - Winrate/ML: Redis pub/sub updates in scalping_bot.py.
 - MEV/RPL: Pauses logged, Telegram alerts.
+- Fallbacks: If Binance data fails, price is fetched from Grok; UI shows yellow note.
 
 ## Maintenance
 - Cleanup: Schedule `python cleanup_hdf5.py` daily (cron: 0 0 * * * python /path/cleanup_hdf5.py).

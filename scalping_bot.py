@@ -16,6 +16,7 @@ from utils.grok_utils import (
     get_multi_sentiment_analysis,
     get_risk_assessment,
     get_grok_recommendation,
+    get_backup_price,
     SentimentResponse,
     RiskResponse,
 )
@@ -209,6 +210,7 @@ async def monitoring_loop():
 
             client = get_binance_client()
             pairs = load_trading_pairs()
+            fallback_info = {}
             symbols = [p.split('/')[0] for p in pairs]
 
             # Fetch BTC data for RPL checks and as fallback for unsupported pairs
@@ -242,14 +244,15 @@ async def monitoring_loop():
                     price = ticker['last']
                     vol = (ticker['high'] - ticker['low']) / ticker['low']
                 except Exception as e:
-                    logging.warning(f"Ticker fetch failed for {pair}: {e}. Using backup values")
-                    if cached:
-                        price, vol = cached[0], cached[1]
-                        fallback_used = True
-                    else:
-                        price = btc_price
+                    logging.warning(f"Ticker fetch failed for {pair}: {e}. Requesting backup price")
+                    price = get_backup_price(base)
+                    if price:
                         vol = btc_vol
-                        fallback_used = True
+                    elif cached:
+                        price, vol = cached[0], cached[1]
+                    else:
+                        price, vol = btc_price, btc_vol
+                    fallback_used = True
 
                 # Candle data
                 try:
@@ -286,7 +289,8 @@ async def monitoring_loop():
                 )
 
                 if fallback_used:
-                    logging.info(f"[fallback] Used cached data for {pair}")
+                    logging.info(f"[fallback] Used backup data for {pair}")
+                fallback_info[pair] = fallback_used
 
                 # Execute strategies
                 if score > 0.7 and risk.trade == 'yes':
@@ -307,6 +311,7 @@ async def monitoring_loop():
             conn.commit()
             conn.close()
             r.publish('winrate_updates', json.dumps({'winrate': winrate}))
+            st.session_state['fallback_pairs'] = fallback_info
 
             await asyncio.sleep(5)
         except Exception as e:
@@ -375,6 +380,10 @@ if __name__ == '__main__':
         st.metric('Winrate', f"{winrate:.2%}", help="Current win rate from trades")
         sharpe = 1.5
         st.metric('Sharpe Ratio', f"{sharpe:.2f}", help="Risk-adjusted return")
+        fb_pairs = st.session_state.get('fallback_pairs', {})
+        warn = [p for p, used in fb_pairs.items() if used]
+        if warn:
+            st.markdown(f":orange[Using backup data for {', '.join(warn)}]")
 
     with tab2:
         st.subheader('Backtest Results', help="Run simulations to test strategies. Select mode for different analysis.")
