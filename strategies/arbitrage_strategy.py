@@ -56,7 +56,7 @@ class ArbitrageStrategy(BaseStrategy):
             if not sl or not tp:
                 logging.info(f"Arbitrage skipped for {symbol_spot}: Invalid SL/TP")
                 return
-            size = self.calculate_position_size(price, (price - sl) / price)
+            size = self.calculate_position_size(price, (price - sl) / price, vol=vol)
 
             # Execute if spread exceeds threshold
             if spread > self.threshold:
