@@ -1,6 +1,7 @@
 import logging
 import sqlite3
 import asyncio
+from datetime import datetime
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from config import TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION, DB_PATH
@@ -64,7 +65,8 @@ async def fetch_channel_messages(channel, limit=100):
         cursor = conn.cursor()
         cursor.execute("SELECT value FROM settings WHERE key='last_telegram_pull'")
         last_pull = cursor.fetchone()
-        last_pull_ts = last_pull[0] if last_pull else '1970-01-01'
+        last_pull_ts_str = last_pull[0] if last_pull else "1970-01-01T00:00:00"
+        last_pull_ts = datetime.fromisoformat(last_pull_ts_str)
         conn.close()
 
         client = await get_client()
