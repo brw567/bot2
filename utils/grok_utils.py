@@ -167,6 +167,7 @@ def get_risk_assessment(symbol, price, vol, winrate):
                 "details": "str"
             }
         }
+        logging.info(f"Risk assessment prompt for {symbol}: {prompt}")
         return grok_api_call(prompt)
     except Exception as e:
         logging.error(f"Risk assessment failed for {symbol}: {e}")
@@ -182,6 +183,7 @@ def get_grok_recommendation(symbol: str, param: str) -> float:
             "parameter": param,
             "output_schema": {"value": "float"},
         }
+        logging.info(f"Parameter tuning prompt for {symbol} {param}: {prompt}")
         result = grok_api_call(prompt)
         if isinstance(result, dict) and "value" in result:
             return float(result["value"])
