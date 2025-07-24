@@ -2,6 +2,7 @@ import requests
 import json
 import logging
 import asyncio
+import streamlit as st
 from pydantic import BaseModel, ValidationError
 from utils.telegram_utils import fetch_channel_messages
 from config import GROK_API_KEY
@@ -126,3 +127,23 @@ def get_risk_assessment(symbol, price, vol, winrate):
     except Exception as e:
         logging.error(f"Risk assessment failed for {symbol}: {e}")
         return RiskResponse(trade="no", sl_mult=0.0, tp_mult=0.0, details="Error in processing")
+
+
+def get_grok_recommendation(symbol: str, param: str) -> float:
+    """Request a recommended parameter value from Grok."""
+    try:
+        prompt = {
+            "task": "parameter_tuning",
+            "symbol": symbol,
+            "parameter": param,
+            "output_schema": {"value": "float"},
+        }
+        result = grok_api_call(prompt)
+        if isinstance(result, dict) and "value" in result:
+            return float(result["value"])
+        if hasattr(result, "value"):
+            return float(result.value)
+        return 0.0
+    except Exception as e:
+        logging.error(f"Parameter recommendation failed for {symbol} {param}: {e}")
+        return 0.0
