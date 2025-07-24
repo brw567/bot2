@@ -96,6 +96,7 @@ async def get_sentiment_analysis(symbol):
         for channel in channels:
             channel_msgs = await fetch_channel_messages(channel, limit=100)  # Extended limit, timestamp filtered
             messages.extend(channel_msgs)
+        logging.info(f"{len(messages)} messages gathered for sentiment analysis")
         prompt = {
             "task": "sentiment_analysis",
             "symbol": symbol,
@@ -116,6 +117,7 @@ async def get_multi_sentiment_analysis(symbols):
         for channel in channels:
             channel_msgs = await fetch_channel_messages(channel, limit=100)
             messages.extend(channel_msgs)
+        logging.info(f"{len(messages)} messages gathered for sentiment analysis")
         prompt = {
             "task": "multi_sentiment",
             "symbols": symbols,
