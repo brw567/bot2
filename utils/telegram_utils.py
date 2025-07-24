@@ -56,7 +56,8 @@ async def fetch_channel_messages(channel, limit=100):
         list: List of message texts (filtered for non-empty).
 
     Note: Uses timestamp filtering via DB to fetch only new messages since last pull,
-    addressing immediate task for extended sentiment fetch. Stores last pull time in DB.
+    addressing immediate task for extended sentiment fetch. Stores last pull time in DB
+    as an ISO-formatted timestamp.
     """
     client = None
     try:
@@ -64,8 +65,11 @@ async def fetch_channel_messages(channel, limit=100):
         cursor = conn.cursor()
         cursor.execute("SELECT value FROM settings WHERE key='last_telegram_pull'")
         last_pull = cursor.fetchone()
-        last_pull_ts_str = last_pull[0] if last_pull else "1970-01-01T00:00:00"
-        last_pull_ts = datetime.fromisoformat(last_pull_ts_str)
+        last_pull_ts = (
+            datetime.fromisoformat(last_pull[0])
+            if last_pull
+            else datetime.fromisoformat("1970-01-01T00:00:00")
+        )
         conn.close()
 
         client = await get_client()
