@@ -10,6 +10,10 @@ from config import BINANCE_API_KEY, BINANCE_API_SECRET
 
 logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
 
+# Globals to store training statistics for consistent prediction
+TRAIN_MEAN = None
+TRAIN_STD = None
+
 class PriceLSTM(nn.Module):
     """
     LSTM model for price prediction in scalping.
@@ -99,7 +103,12 @@ def train_model(symbol='BTC/USDT', epochs=5):
 
         df = fetch_historical_data(symbol, years=1)
         features = df[['close', 'volume', 'rsi']].values
-        features = (features - features.mean(0)) / features.std(0)  # Normalize
+        # Compute and store training mean/std for later inference
+        global TRAIN_MEAN, TRAIN_STD
+        TRAIN_MEAN = features.mean(0)
+        TRAIN_STD = features.std(0)
+        logging.info(f"Training data mean: {TRAIN_MEAN}, std: {TRAIN_STD}")
+        features = (features - TRAIN_MEAN) / TRAIN_STD  # Normalize using train stats
         split = int(0.8 * len(features))
         train_X, val_X = features[:split, :-1], features[split:, :-1]
         train_y, val_y = features[1:split+1, 0], features[split+1:, 0]
@@ -144,7 +153,11 @@ def predict_next_price(model, recent_data):
         if model is None:
             logging.error("No trained model provided for prediction")
             return 0.0
-        input_data = (recent_data - recent_data.mean(0)) / recent_data.std(0)
+        # Use stored training statistics if available for consistent scaling
+        if TRAIN_MEAN is not None and TRAIN_STD is not None:
+            input_data = (recent_data - TRAIN_MEAN) / TRAIN_STD
+        else:
+            input_data = (recent_data - recent_data.mean(0)) / recent_data.std(0)
         input_tensor = torch.tensor(input_data.reshape(1, 1, 3), dtype=torch.float32)
         with torch.no_grad():
             pred = model(input_tensor).item()
