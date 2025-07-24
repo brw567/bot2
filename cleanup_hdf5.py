@@ -32,7 +32,7 @@ def cleanup():
                 file_path = os.path.join(HDF5_DIR, file)
                 try:
                     # Validate HDF5 file
-                    with h5py.File(file_path, 'r') as f:
+                    with h5py.File(file_path, 'r') as _:
                         pass  # File is valid if opened successfully
                     file_mtime = os.stat(file_path).st_mtime
                     file_size = os.path.getsize(file_path)

@@ -13,7 +13,6 @@ import redis
 from config import DB_PATH, DEFAULT_PARAMS, REDIS_HOST, REDIS_PORT, REDIS_DB, BINANCE_WEIGHT_LIMIT
 from utils.binance_utils import get_binance_client
 from utils.grok_utils import (
-    get_sentiment_analysis,
     get_multi_sentiment_analysis,
     get_risk_assessment,
     get_grok_recommendation,

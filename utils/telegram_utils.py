@@ -1,8 +1,7 @@
 import logging
 import sqlite3
-import asyncio
 from datetime import datetime
-from telethon import TelegramClient, events
+from telethon import TelegramClient
 from telethon.sessions import StringSession
 from config import TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION, DB_PATH
 

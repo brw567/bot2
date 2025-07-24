@@ -97,14 +97,6 @@ class ScalpingStrategy(bt.Strategy):
         })
         kmeans = KMeans(n_clusters=2).fit(data)
         cluster = kmeans.predict([data.iloc[-1]])[0]
-        # Estimate conditional volatility using a simple GARCH(1,1)
-        returns = data['close'].pct_change().dropna()
-        if len(returns) > 1:
-            am = arch_model(returns, vol='Garch', p=1, q=1)
-            res = am.fit(disp='off')
-            vol = res.conditional_volatility.iloc[-1]
-        else:
-            vol = 0.02
 
         if self.ema12[0] > self.ema26[0] and self.rsi[0] < 70 and cluster == 1:
             size = self.broker.getcash() * 0.01 / self.data.close[0]  # 1% risk

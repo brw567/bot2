@@ -61,8 +61,8 @@ class ArbitrageStrategy(BaseStrategy):
             # Execute if spread exceeds threshold
             if spread > self.threshold:
                 from utils.binance_utils import execute_trade  # Dynamic import
-                order_buy = execute_trade(symbol_spot, 'buy', size)
-                order_sell = execute_trade(symbol_futures, 'sell', size)
+                execute_trade(symbol_spot, 'buy', size)
+                execute_trade(symbol_futures, 'sell', size)
                 logging.info(f"Arbitrage executed: {symbol_spot}/{symbol_futures}, spread={spread:.4f}, size={size:.6f}")
                 # Log trade to DB (mock profit for simplicity)
                 conn = sqlite3.connect(DB_PATH)
