@@ -11,7 +11,7 @@
 - GUI Tabs:
   - Dashboard: Real-time charts, trade log (aggrid sortable), live metrics (winrate, Sharpe).
   - Backtest: Select mode (simple/vectorbt, advanced/backtrader, ML), run sims.
-  - Settings: Select Telegram channels, adjust params (risk per trade).
+  - Settings: Select Telegram channels, adjust params (risk per trade) and set the auto-trade pair limit.
 - Telegram: Notifications for trades/MEV; sentiment from selected channels.
 
 ## Features
@@ -19,6 +19,7 @@
 - Risk: Dynamic SL/TP, Kelly sizing (<1% risk/trade).
 - Pauses: RPL spikes (>20%), quotas (>80% limit), drawdowns.
 - Fallback prices from Grok shown in yellow if Binance data fails.
+- Grok-recommended pairs (5x limit) monitored for analytics.
 
 ## Troubleshooting
 - API errors: Check keys in `.env`.

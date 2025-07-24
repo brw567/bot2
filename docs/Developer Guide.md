@@ -17,6 +17,7 @@
 - Backtest: Modes in backtest.py (vectorbt simple, backtrader advanced, ML).
 - Strategies: Inherit BaseStrategy for risk (Kelly, Grok SL/TP).
 - GUI: Streamlit tabs, aggrid tables, backtest toggle.
+- Grok provides recommended pairs (5x auto-trade limit) stored in SQLite for analytics.
 
 ## Debugging
 - Logs: bot.log (signals, errors).

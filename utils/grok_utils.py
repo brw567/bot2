@@ -214,3 +214,27 @@ def get_backup_price(symbol: str) -> float:
     except Exception as e:
         logging.error(f"Backup price lookup failed for {symbol}: {e}")
     return 0.0
+
+
+class RecommendedPairsResponse(BaseModel):
+    """Response model for recommended trading pairs."""
+    pairs: list[str]
+
+
+def get_recommended_pairs(count: int) -> list[str]:
+    """Request a list of recommended pairs from Grok."""
+    try:
+        prompt = {
+            "task": "recommended_pairs",
+            "count": count,
+            "output_schema": {"pairs": "list[str]"},
+        }
+        logging.info(f"Task recommended_pairs count={count}")
+        result = grok_api_call(prompt)
+        if isinstance(result, dict) and "pairs" in result:
+            return result["pairs"]
+        if hasattr(result, "pairs"):
+            return result.pairs
+    except Exception as e:
+        logging.error(f"Recommended pairs fetch failed: {e}")
+    return []
