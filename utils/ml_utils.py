@@ -110,10 +110,12 @@ def train_model(symbol='BTC/USDT', epochs=5):
         TRAIN_STD = features.std(0)
         logging.info(f"Training data mean: {TRAIN_MEAN}, std: {TRAIN_STD}")
         features = (features - TRAIN_MEAN) / TRAIN_STD  # Normalize using train stats
-        split = int(0.8 * len(features))
-        # Use all features for X and shift targets by one step
-        train_X, val_X = features[:split-1], features[split:-1]
-        train_y, val_y = features[1:split, 0], features[split+1:, 0]
+        # Sequential split with next-step target
+        X = features[:-1]
+        y = features[1:, 0]
+        split = int(0.8 * len(X))
+        train_X, val_X = X[:split], X[split:]
+        train_y, val_y = y[:split], y[split:]
         train_X = torch.tensor(train_X.reshape(-1, 1, input_size), dtype=torch.float32)
         train_y = torch.tensor(train_y.reshape(-1, 1), dtype=torch.float32)
         val_X = torch.tensor(val_X.reshape(-1, 1, input_size), dtype=torch.float32)
