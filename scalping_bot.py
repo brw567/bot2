@@ -324,3 +324,7 @@ if __name__ == '__main__':
         if st.button('Save Telegram Config', disabled=disabled):
             # Save to .env or DB
             pass
+
+        st.subheader('Grok Configuration')
+        grok_timeout = st.number_input('Grok API Timeout (seconds)', 5, 60, params.get('grok_timeout', 10), disabled=disabled)
+        st.session_state['grok_timeout'] = grok_timeout

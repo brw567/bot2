@@ -1,11 +1,10 @@
 import requests
 import json
 import logging
-import asyncio
 import streamlit as st
 from pydantic import BaseModel, ValidationError
 from utils.telegram_utils import fetch_channel_messages
-from config import GROK_API_KEY
+from config import GROK_API_KEY, GROK_TIMEOUT
 
 logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
 
@@ -51,23 +50,24 @@ def grok_api_call(prompt):
         headers = {'Authorization': f'Bearer {GROK_API_KEY}', 'Content-Type': 'application/json'}
         prompt['instructions'] = "Output ONLY valid JSON matching the provided schema. Include details explaining reasoning."
         data = {'model': 'grok-beta', 'messages': [{'role': 'user', 'content': json.dumps(prompt)}]}
-        response = requests.post(GROK_API_URL, headers=headers, json=data)
+        response = requests.post(GROK_API_URL, headers=headers, json=data, timeout=st.session_state.get("grok_timeout", GROK_TIMEOUT))
+        logging.info(f"Grok task {prompt.get('task')}: {response.text}")
         response.raise_for_status()
         result = json.loads(response.json()['choices'][0]['message']['content'])
         
         # Validate based on task
         if prompt.get('task') == 'sentiment_analysis':
             validated = SentimentResponse(**result)
-            logging.info(f"Grok sentiment response: {validated.dict()}")
+            logging.info(f"{prompt.get('task')} succeeded")
             return validated
         elif prompt.get('task') == 'multi_sentiment':
             validated = MultiSentimentResponse(__root__=
                                                {k: SentimentResponse(**v) for k, v in result.items()})
-            logging.info(f"Grok multi-sentiment response: {validated.__root__}")
+            logging.info(f"{prompt.get('task')} succeeded")
             return validated.__root__
         elif prompt.get('task') == 'risk_assessment':
             validated = RiskResponse(**result)
-            logging.info(f"Grok risk response: {validated.dict()}")
+            logging.info(f"{prompt.get('task')} succeeded")
             return validated
         else:
             raise ValueError(f"Unknown task: {prompt.get('task')}")

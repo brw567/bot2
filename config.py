@@ -21,6 +21,7 @@ TELEGRAM_SESSION = os.getenv('TELEGRAM_SESSION')
 
 # Grok API for AI-driven risk assessment and parameter tuning (requests)
 GROK_API_KEY = os.getenv('GROK_API_KEY')
+GROK_TIMEOUT = int(os.getenv("GROK_TIMEOUT", 10))
 
 # Dune API for on-chain metrics (e.g., STH RPL via dune-client)
 DUNE_API_KEY = os.getenv('DUNE_API_KEY')
@@ -44,5 +45,6 @@ HDF5_DIR = 'data/hdf5/'  # Directory for historical data storage (used by h5py)
 DEFAULT_PARAMS = {
     'win_rate_threshold': 0.6,  # Minimum winrate to continue trading
     'max_consec_losses': 3,     # Pause after 3 consecutive losses
-    'slippage_tolerance': 0.001  # Max slippage (0.1%) for trade execution
+    'slippage_tolerance': 0.001,  # Max slippage (0.1%) for trade execution
+    'grok_timeout': GROK_TIMEOUT,
 }
