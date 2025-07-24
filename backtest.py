@@ -4,7 +4,7 @@ import ccxt
 import vectorbt as vbt
 import backtrader as bt
 from sklearn.cluster import KMeans
-import statsmodels.api as sm
+from arch import arch_model
 import logging
 from config import BINANCE_API_KEY, BINANCE_API_SECRET
 from utils.ml_utils import fetch_historical_data, train_model, predict_next_price
@@ -97,8 +97,14 @@ class ScalpingStrategy(bt.Strategy):
         })
         kmeans = KMeans(n_clusters=2).fit(data)
         cluster = kmeans.predict([data.iloc[-1]])[0]
-        # Mock GARCH volatility (fitted externally for simplicity)
-        vol = 0.02  # Placeholder; integrate statsmodels in live
+        # Estimate conditional volatility using a simple GARCH(1,1)
+        returns = data['close'].pct_change().dropna()
+        if len(returns) > 1:
+            am = arch_model(returns, vol='Garch', p=1, q=1)
+            res = am.fit(disp='off')
+            vol = res.conditional_volatility.iloc[-1]
+        else:
+            vol = 0.02
 
         if self.ema12[0] > self.ema26[0] and self.rsi[0] < 70 and cluster == 1:
             size = self.broker.getcash() * 0.01 / self.data.close[0]  # 1% risk
@@ -167,7 +173,7 @@ def ml_backtest(symbol='BTC/USDT', timeframe='5m', years=1):
     Returns:
         dict: Metrics including overfitting status, train/val loss, Sharpe, etc.
     
-    Note: Uses scikit-learn for clustering and statsmodels for volatility to enhance signals.
+    Note: Uses scikit-learn for clustering and the arch library for volatility to enhance signals.
     """
     try:
         # Train ML model with train/validation split
@@ -194,10 +200,14 @@ def ml_backtest(symbol='BTC/USDT', timeframe='5m', years=1):
         kmeans = KMeans(n_clusters=2, random_state=42).fit(features)
         df['cluster'] = [None] * 60 + list(kmeans.predict(features))
 
-        # Volatility with statsmodels GARCH (simplified for backtest)
+        # Volatility with arch GARCH (simplified for backtest)
         returns = df['close'].pct_change().dropna()
-        garch = sm.tsa.ARIMA(returns, order=(0, 0, 0), exog=None).fit()
-        vol = garch.conditional_volatility[-1] if len(garch.conditional_volatility) > 0 else 0.02
+        if len(returns) > 1:
+            am = arch_model(returns, vol='Garch', p=1, q=1)
+            res = am.fit(disp='off')
+            vol = res.conditional_volatility.iloc[-1]
+        else:
+            vol = 0.02
 
         # Adjust signals (0.4*TA + 0.2*ML + 0.1*cluster, volatility scales)
         df['ema12'] = talib.EMA(df['close'], timeperiod=12)
