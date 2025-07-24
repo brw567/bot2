@@ -121,32 +121,37 @@ Test Redis:
 ## 8. Bot Deployment
 
 Create and activate virtual environment:
-
+```
 python3.12 -m venv venv
 source venv/bin/activate
+```
 
 Install dependencies:
-
+```
 pip install -r requirements.txt
+```
 
 Secure .env file:
-
+```
 cp .env.example .env
 vim .env  # Fill API keys (Binance, Telegram, Grok, Dune, Redis)
 chmod 600 .env
+```
 
 Run install script to initialize DB and Telethon session:
-
+```
 ./install.sh
+```
 
-Note: install.sh prompts for Telegram phone/code; copy the session string to .env as TELEGRAM_SESSION.
+**Note:** `install.sh` prompts for Telegram phone/code; copy the session string to `.env` as `TELEGRAM_SESSION`.
 
 Run bot as a systemd service for continuous operation:
-
+```
 sudo vim /etc/systemd/system/bot.service
+```
 
 Add:
-
+```
 [Unit]
 Description=Ultimate Crypto Scalping Bot
 After=network.target redis-server.service
@@ -159,44 +164,36 @@ Restart=always
 
 [Install]
 WantedBy=multi-user.target
+```
 
 Enable and start the service:
-
+```
 sudo systemctl daemon-reload
 sudo systemctl enable bot
 sudo systemctl start bot
+```
 
 Monitor the service:
-
+```
 sudo systemctl status bot
 tail -f /opt/bot/bot.log
+```
 
-Troubleshooting
+## Troubleshooting
 
-
-
-
-
-SSH Issues: Check /var/log/auth.log.
-
-
+SSH Issues: Check `/var/log/auth.log`.
 
 Redis: Run redis-cli monitor for debugging.
 
+Bot Errors: Check `bot.log` or `journalctl -u bot`.
 
-
-Bot Errors: Check bot.log or journalctl -u bot.
-
-
-
-Dependency Issues: Re-run pip install -r requirements.txt.
-
-
+Dependency Issues: Re-run `pip install -r requirements.txt`.
 
 Updates: Pull and restart:
-
+```
 git pull
 pip install -r requirements.txt
 sudo systemctl restart bot
+```
 
-Note: Ensure DUNE_QUERY_ID in .env matches a valid Dune query for STH RPL. Run in paper mode (mock CCXT trades) before live trading.
+**Note:** Ensure `DUNE_QUERY_ID` in `.env` matches a valid Dune query for STH RPL. Run in paper mode (mock CCXT trades) before live trading.
