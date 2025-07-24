@@ -49,6 +49,7 @@ def redis_subscriber():
 threading.Thread(target=redis_subscriber, daemon=True).start()
 
 def init_db():
+    """Create required SQLite tables and insert default settings."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''CREATE TABLE IF NOT EXISTS settings
@@ -78,6 +79,7 @@ def init_db():
     conn.close()
 
 def load_params(pair=None):
+    """Load global or per-pair parameters from the database."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     if pair:
@@ -274,14 +276,15 @@ async def monitoring_loop():
             btc_price = btc_ticker['last']
             btc_vol = (btc_ticker['high'] - btc_ticker['low']) / btc_ticker['low']  # Simple volatility
 
-            # RPL spike check
+            # RPL spike check with zero-division guard
             current_rpl = fetch_sth_rpl('BTC')
-            if current_rpl / prev_rpl > 1.2:
+            if prev_rpl > 0 and current_rpl > 0 and current_rpl / prev_rpl > 1.2:
                 logging.info("RPL spike >20%; pausing 30min")
                 await asyncio.sleep(1800)
                 prev_rpl = current_rpl
                 continue
-            prev_rpl = current_rpl
+            if current_rpl > 0:
+                prev_rpl = current_rpl
 
             # Sentiment for all pairs
             sentiments = await get_multi_sentiment_analysis(symbols)
