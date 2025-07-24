@@ -1,9 +1,14 @@
-import requests
+"""Utility functions for interacting with the Grok API."""
+
+import asyncio
 import json
 import logging
-import asyncio
+from typing import Any, Dict
+
+import requests
 import streamlit as st
 from pydantic import BaseModel, ValidationError
+
 from utils.telegram_utils import fetch_channel_messages
 from config import GROK_API_KEY
 
@@ -30,41 +35,45 @@ class RiskResponse(BaseModel):
     tp_mult: float
     details: str  # Added for reasoning
 
-def grok_api_call(prompt):
-    """
-    Make a Grok API call with structured JSON prompt.
-
-    Args:
-        prompt (dict): Structured JSON prompt with task, data, and output schema.
-
-    Returns:
-        BaseModel: Validated Pydantic model (SentimentResponse or RiskResponse).
-
-    Note: Uses Pydantic for strict output validation, addressing immediate task.
-    Instructs Grok to return only JSON matching schema for reliability.
-    """
+def grok_api_call(prompt: Dict[str, Any]) -> BaseModel:
+    """Call Grok with a structured prompt and validate the JSON response."""
     try:
-        headers = {'Authorization': f'Bearer {GROK_API_KEY}', 'Content-Type': 'application/json'}
-        prompt['instructions'] = "Output ONLY valid JSON matching the provided schema. Include details explaining reasoning."
-        data = {'model': 'grok-beta', 'messages': [{'role': 'user', 'content': json.dumps(prompt)}]}
-        response = requests.post(GROK_API_URL, headers=headers, json=data)
+        headers = {
+            "Authorization": f"Bearer {GROK_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        # Instruct Grok to reply with JSON only so that we can parse reliably
+        prompt["instructions"] = (
+            "Output ONLY valid JSON matching the provided schema. "
+            "Include details explaining reasoning."
+        )
+        data = {
+            "model": "grok-beta",
+            "messages": [{"role": "user", "content": json.dumps(prompt)}],
+        }
+
+        logging.debug("Sending Grok prompt: %s", prompt)
+        response = requests.post(GROK_API_URL, headers=headers, json=data, timeout=10)
         response.raise_for_status()
-        result = json.loads(response.json()['choices'][0]['message']['content'])
+        result = json.loads(response.json()["choices"][0]["message"]["content"])
         
-        # Validate based on task
-        if prompt.get('task') == 'sentiment_analysis':
+        logging.debug("Grok raw response: %s", result)
+
+        # Validate based on requested task
+        if prompt.get("task") == "sentiment_analysis":
             validated = SentimentResponse(**result)
-            logging.info(f"Grok sentiment response: {validated.dict()}")
+            logging.info("Grok sentiment response: %s", validated.json())
             return validated
-        elif prompt.get('task') == 'risk_assessment':
+        if prompt.get("task") == "risk_assessment":
             validated = RiskResponse(**result)
-            logging.info(f"Grok risk response: {validated.dict()}")
+            logging.info("Grok risk response: %s", validated.json())
             return validated
-        else:
-            raise ValueError(f"Unknown task: {prompt.get('task')}")
-    except (requests.RequestException, json.JSONDecodeError, ValidationError) as e:
-        logging.error(f"Grok API call failed: {e}")
-        return SentimentResponse(sentiment="neutral", score=0.0, details="Validation failed") if prompt.get('task') == 'sentiment_analysis' else RiskResponse(trade="no", sl_mult=0.0, tp_mult=0.0, details="Validation failed")
+        raise ValueError(f"Unknown task: {prompt.get('task')}")
+    except (requests.RequestException, json.JSONDecodeError, ValidationError, ValueError) as e:
+        logging.error("Grok API call failed: %s", e)
+        if prompt.get("task") == "sentiment_analysis":
+            return SentimentResponse(sentiment="neutral", score=0.0, details="Validation failed")
+        return RiskResponse(trade="no", sl_mult=0.0, tp_mult=0.0, details="Validation failed")
 
 async def get_sentiment_analysis(symbol):
     """
@@ -83,7 +92,8 @@ async def get_sentiment_analysis(symbol):
         channels = st.session_state.get('channels', ['crypto_news_channel'])
         messages = []
         for channel in channels:
-            channel_msgs = await fetch_channel_messages(channel, limit=100)  # Extended limit, timestamp filtered
+            channel_msgs = await fetch_channel_messages(channel, limit=100)
+            logging.debug("Fetched %d messages from %s", len(channel_msgs), channel)
             messages.extend(channel_msgs)
         prompt = {
             "task": "sentiment_analysis",
@@ -91,6 +101,7 @@ async def get_sentiment_analysis(symbol):
             "messages": ' '.join(messages[:20]),  # Limit to 20 to avoid token limits
             "output_schema": {"sentiment": "positive/negative/neutral", "score": "float", "details": "str"}
         }
+        logging.debug("Aggregated %d messages for sentiment analysis", len(messages))
         return grok_api_call(prompt)
     except Exception as e:
         logging.error(f"Sentiment analysis failed for {symbol}: {e}")
@@ -120,9 +131,10 @@ def get_risk_assessment(symbol, price, vol, winrate):
                 "trade": "yes/no",
                 "sl_mult": "float",
                 "tp_mult": "float",
-                "details": "str"
-            }
+                "details": "str",
+            },
         }
+        logging.debug("Requesting risk assessment: %s", prompt)
         return grok_api_call(prompt)
     except Exception as e:
         logging.error(f"Risk assessment failed for {symbol}: {e}")
@@ -138,6 +150,7 @@ def get_grok_recommendation(symbol: str, param: str) -> float:
             "parameter": param,
             "output_schema": {"value": "float"},
         }
+        logging.debug("Requesting parameter recommendation: %s", prompt)
         result = grok_api_call(prompt)
         if isinstance(result, dict) and "value" in result:
             return float(result["value"])
@@ -145,5 +158,5 @@ def get_grok_recommendation(symbol: str, param: str) -> float:
             return float(result.value)
         return 0.0
     except Exception as e:
-        logging.error(f"Parameter recommendation failed for {symbol} {param}: {e}")
+        logging.error("Parameter recommendation failed for %s %s: %s", symbol, param, e)
         return 0.0
