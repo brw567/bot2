@@ -17,6 +17,7 @@ from utils.grok_utils import (
     get_risk_assessment,
     get_grok_recommendation,
     SentimentResponse,
+    RiskResponse,
 )
 from utils.onchain_utils import fetch_sth_rpl
 from utils.ml_utils import predict_next_price, train_model
@@ -54,6 +55,14 @@ def init_db():
                       (pair TEXT, key TEXT, value TEXT, PRIMARY KEY (pair, key))''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS trades
                       (id INTEGER PRIMARY KEY, symbol TEXT, profit FLOAT, timestamp DATETIME)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS indicators_cache
+                      (pair TEXT PRIMARY KEY,
+                       price REAL,
+                       vol REAL,
+                       candles TEXT,
+                       risk TEXT,
+                       sentiment TEXT,
+                       timestamp REAL)''')
     for k, v in DEFAULT_PARAMS.items():
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, str(v)))
     conn.commit()
@@ -105,6 +114,52 @@ def fetch_recent_candles(symbol, timeframe='5m', limit=60):
     df.dropna(inplace=True)
     CANDLE_CACHE[cache_key] = {'timestamp': time.time(), 'df': df}
     return df, True
+
+
+def save_cached_indicators(pair, price, vol, candles_df, risk: RiskResponse, sentiment: SentimentResponse):
+    """Persist indicators for fallback usage."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO indicators_cache (pair, price, vol, candles, risk, sentiment, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                pair,
+                price,
+                vol,
+                candles_df.to_json(orient='records'),
+                risk.json(),
+                sentiment.json(),
+                time.time(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Saving indicators for {pair} failed: {e}")
+
+
+def load_cached_indicators(pair):
+    """Load cached indicators from DB if available."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT price, vol, candles, risk, sentiment FROM indicators_cache WHERE pair=?",
+            (pair,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            price, vol, candles_json, risk_json, sentiment_json = row
+            candles = pd.read_json(candles_json)
+            risk = RiskResponse(**json.loads(risk_json))
+            sentiment = SentimentResponse(**json.loads(sentiment_json))
+            return price, vol, candles, risk, sentiment
+    except Exception as e:
+        logging.error(f"Loading indicators for {pair} failed: {e}")
+    return None
 
 
 def get_signal_score(symbol, price, ta_score, sentiment, onchain_rpl, recent_data=None):
@@ -177,32 +232,49 @@ async def monitoring_loop():
             for pair in pairs:
                 base = pair.split('/')[0]
                 sentiment = sentiments.get(base, SentimentResponse(sentiment='neutral', score=0.0, details='Missing'))
+                cached = load_cached_indicators(pair)
+                fallback_used = False
 
-                # Fetch ticker; fall back to BTC data if unsupported
+                # Fetch ticker
                 try:
                     ticker = client.fetch_ticker(pair)
                     weight_counter += request_weights['fetch_ticker']
                     price = ticker['last']
                     vol = (ticker['high'] - ticker['low']) / ticker['low']
                 except Exception as e:
-                    logging.warning(f"{pair} not supported by Binance: {e}. Using BTC/USDT metrics")
-                    price = btc_price
-                    vol = btc_vol
+                    logging.warning(f"Ticker fetch failed for {pair}: {e}. Using backup values")
+                    if cached:
+                        price, vol = cached[0], cached[1]
+                        fallback_used = True
+                    else:
+                        price = btc_price
+                        vol = btc_vol
+                        fallback_used = True
 
-                # Risk and TA
-                risk = get_risk_assessment(pair, price, vol, st.session_state.get('winrate', 0.65))
-                ta_score = 1 if price > talib.EMA(pd.Series([price] * 26), timeperiod=12)[-1] else 0
-
-                # Candle data with fallback
+                # Candle data
                 try:
                     candles, fetched = fetch_recent_candles(pair)
                     if fetched:
                         weight_counter += request_weights['fetch_ohlcv']
                 except Exception as e:
-                    logging.warning(f"OHLCV fetch failed for {pair}: {e}. Using BTC/USDT cache")
-                    candles, fetched = fetch_recent_candles('BTC/USDT')
-                    if fetched:
-                        weight_counter += request_weights['fetch_ohlcv']
+                    logging.warning(f"OHLCV fetch failed for {pair}: {e}. Using backup values")
+                    if cached:
+                        candles = cached[2]
+                        fallback_used = True
+                    else:
+                        candles, fetched = fetch_recent_candles('BTC/USDT')
+                        if fetched:
+                            weight_counter += request_weights['fetch_ohlcv']
+                        fallback_used = True
+
+                # Risk assessment
+                if cached and fallback_used:
+                    risk = cached[3]
+                    sentiment = cached[4]
+                else:
+                    risk = get_risk_assessment(pair, price, vol, st.session_state.get('winrate', 0.65))
+
+                ta_score = 1 if price > talib.EMA(pd.Series([price] * 26), timeperiod=12)[-1] else 0
 
                 score = get_signal_score(
                     pair,
@@ -213,12 +285,18 @@ async def monitoring_loop():
                     recent_data=candles[['close', 'volume', 'rsi']].values,
                 )
 
+                if fallback_used:
+                    logging.info(f"[fallback] Used cached data for {pair}")
+
                 # Execute strategies
                 if score > 0.7 and risk.trade == 'yes':
                     GridStrategy().run(pair, price)
                     ArbitrageStrategy().run(pair, f"{pair}:USDT")
                     weight_counter += request_weights['create_order']
                 MEVStrategy().detect_mev(pair)
+
+                if not fallback_used:
+                    save_cached_indicators(pair, price, vol, candles, risk, sentiment)
 
             # Update winrate
             conn = sqlite3.connect(DB_PATH)
