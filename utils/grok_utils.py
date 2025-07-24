@@ -195,3 +195,22 @@ def get_grok_recommendation(symbol: str, param: str) -> float:
     except Exception as e:
         logging.error(f"Parameter recommendation failed for {symbol} {param}: {e}")
         return 0.0
+
+
+def get_backup_price(symbol: str) -> float:
+    """Fetch a price estimate via Grok when the exchange API fails."""
+    try:
+        prompt = {
+            "task": "price_lookup",
+            "symbol": symbol,
+            "output_schema": {"price": "float"},
+        }
+        logging.info(f"Task price_lookup for {symbol}")
+        result = grok_api_call(prompt)
+        if isinstance(result, dict) and "price" in result:
+            return float(result["price"])
+        if hasattr(result, "price"):
+            return float(result.price)
+    except Exception as e:
+        logging.error(f"Backup price lookup failed for {symbol}: {e}")
+    return 0.0

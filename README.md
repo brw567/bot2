@@ -8,6 +8,7 @@ The Ultimate Crypto Scalping Bot is an advanced trading tool designed for high-f
 - AI/ML enhanced signals for accuracy (~15% boost in sims).
 - Risk controls (drawdown pauses, quotas) for capital preservation.
 - User-friendly GUI and mobile alerts.
+- Backup price fetch from Grok when Binance fails (UI shows yellow highlight).
 
 ### Cons
 - Dependency on APIs (Binance, Grok, Dune, Telegram)—downtime risks.
