@@ -4,6 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from typing import Iterable, Dict
 import os
+import time
 
 import pandas as pd
 
@@ -15,7 +16,8 @@ except Exception:  # pragma: no cover - optional dep
 
 from utils.binance_utils import get_binance_client
 from utils.ml_utils import lstm_predict
-from utils.onchain_utils import get_oi_funding
+from utils.onchain_utils import get_oi_funding, get_dune_data
+from utils.config import load_config_from_db
 import redis
 import config
 
@@ -33,9 +35,31 @@ class AnalyticsEngine:
     """Asynchronous engine for continuous multi-pair analytics."""
 
     def __init__(self, pairs: Iterable[str], timeframe: str = '1m'):
+        self.cfg = load_config_from_db()
+        self.max_active = int(self.cfg['max_active_pairs'])
+        self.swap_multiplier = int(self.cfg['swap_multiplier'])
+        self.grok_interval = int(self.cfg['grok_interval'])
+        self.dune_interval = int(self.cfg['dune_interval'])
+        self.analytics_interval = int(self.cfg['analytics_interval'])
+        self.swap_threshold = float(self.cfg['swap_threshold'])
+        self.cooldown_period = int(self.cfg['cooldown'])
+        self.forecast_period = int(self.cfg['forecast_period'])
+        self.history_period = int(self.cfg['history_period'])
+
         self.pairs = list(pairs)
+        needed = self.max_active * self.swap_multiplier
+        if len(self.pairs) < needed:
+            from utils.grok_utils import get_grok_pairs
+            extra = get_grok_pairs(needed)
+            for p in extra:
+                if p not in self.pairs:
+                    self.pairs.append(p)
+                if len(self.pairs) >= needed:
+                    break
         self.timeframe = timeframe
         self.metrics: Dict[str, dict] = {}
+        self.cooldowns: dict[str, float] = {}
+        self.volatile = False
         try:
             self.redis = redis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT, db=config.REDIS_DB)
         except Exception:
@@ -94,8 +118,47 @@ class AnalyticsEngine:
             logging.error(f"Metric calculation failed: {e}")
             return {'rsi': 50.0, 'macd_diff': 0.0, 'atr': 0.0, 'sharpe': 0.0, 'avg_atr': 0.0}
 
+    def smart_rating(self, metrics: dict, forecast: int) -> float:
+        """Return a simplified profitability rating."""
+        sharpe = metrics.get('sharpe', 0)
+        rsi_comp = (metrics.get('rsi', 50) - 50) / 50
+        oi = metrics.get('oi_change', 0) / 100
+        return 0.4 * sharpe + 0.3 * rsi_comp + 0.3 * oi
+
+    def detect_volatility(self, dune: dict) -> bool:
+        """Determine if the market is volatile based on ATR and Dune data."""
+        atr_flag = any(
+            m.get('atr', 0) > m.get('avg_atr', 0) * 2 for m in self.metrics.values()
+        )
+        oi_flag = dune.get('volume', 0) > 10
+        return atr_flag or oi_flag
+
+    def handle_swapping(self) -> None:
+        """Swap active pairs if a swap pair scores much higher."""
+        active = self.pairs[: self.max_active]
+        swaps = self.pairs[self.max_active :]
+        if not swaps or not active:
+            return
+        ratings = {p: self.metrics.get(p, {}).get('rating', 0) for p in self.pairs}
+        low = min(active, key=lambda p: ratings.get(p, 0))
+        high = max(swaps, key=lambda p: ratings.get(p, 0))
+        if ratings.get(high, 0) > ratings.get(low, 0) * self.swap_threshold:
+            now = time.time()
+            if now >= self.cooldowns.get(low, 0):
+                li = self.pairs.index(low)
+                hi = self.pairs.index(high)
+                self.pairs[li], self.pairs[hi] = self.pairs[hi], self.pairs[li]
+                self.cooldowns[low] = now + self.cooldown_period
+
     async def analyze_once(self):
         """Analyze all pairs once and update metrics."""
+        dune_data = get_dune_data()
+        self.volatile = self.detect_volatility(dune_data)
+        if self.redis:
+            try:
+                self.redis.set("market_volatile", json.dumps({"volatile": self.volatile}))
+            except Exception:
+                pass
         for pair in self.pairs:
             try:
                 df = await self.fetch_data(pair)
@@ -115,6 +178,8 @@ class AnalyticsEngine:
                 else:
                     metrics.update({'pattern': 'hold', 'strategy': 'hold', 'oi_change': oi_change})
                 metrics['funding_rate'] = funding
+                metrics['oi_change'] = oi_change
+                metrics['rating'] = self.smart_rating(metrics, self.forecast_period)
                 metrics['data_source'] = df['source'].iloc[-1] if 'source' in df else 'binance'
                 prev = self.metrics.get(pair, {})
                 self.metrics[pair] = metrics
@@ -136,10 +201,17 @@ class AnalyticsEngine:
                     await send_alert(f"Analysis failed for {pair}: {e}")
                 except Exception as err:
                     logging.error(f"Alert failed: {err}")
+        self.handle_swapping()
 
     async def continuous_analyze(self, interval: int = 60):
-        """Run continuous analysis loop."""
+        """Run continuous analysis loop with dynamic intervals and pair updates."""
+        next_update = 0.0
         while True:
+            now = time.time()
+            if now >= next_update:
+                from utils.grok_utils import get_grok_pairs
+                self.pairs = get_grok_pairs(self.max_active * self.swap_multiplier)
+                next_update = now + (self.grok_interval / 2 if self.volatile else self.grok_interval)
             try:
                 await self.analyze_once()
             except Exception as e:  # pragma: no cover - top level errors
@@ -149,4 +221,5 @@ class AnalyticsEngine:
                     await send_alert(f"Continuous analyze failure: {e}")
                 except Exception as err:
                     logging.error(f"Alert failed: {err}")
+            interval = 30 if self.volatile else self.analytics_interval
             await asyncio.sleep(interval)

@@ -13,7 +13,7 @@ os.environ.setdefault('BINANCE_API_SECRET', 'y')
 
 
 def test_analyze_once():
-    originals = {k: sys.modules.get(k) for k in ['utils.binance_utils','utils.ml_utils','utils.onchain_utils','redis','ta','dotenv']}
+    originals = {k: sys.modules.get(k) for k in ['utils.binance_utils','utils.ml_utils','utils.onchain_utils','redis','ta','dotenv','utils.grok_utils']}
     try:
         binance_stub = types.ModuleType('utils.binance_utils')
         class DummyClient:
@@ -28,7 +28,12 @@ def test_analyze_once():
 
         onchain_stub = types.ModuleType('utils.onchain_utils')
         onchain_stub.get_oi_funding = lambda pair: ({'change': 0}, 0)
+        onchain_stub.get_dune_data = lambda: {'volume': 0}
         sys.modules['utils.onchain_utils'] = onchain_stub
+
+        grok_stub = types.ModuleType('utils.grok_utils')
+        grok_stub.get_grok_pairs = lambda count: ['BTC/USDT']
+        sys.modules['utils.grok_utils'] = grok_stub
 
         redis_stub = types.ModuleType('redis')
         class DummyRedis:
@@ -78,6 +83,7 @@ def test_fallback_and_notify():
         async def grok_fetch_ohlcv(pair, tf, limit=100):
             return [[i,1,1,1,1+i,1] for i in range(limit)]
         grok_stub.grok_fetch_ohlcv = grok_fetch_ohlcv
+        grok_stub.get_grok_pairs = lambda count: ['BTC/USDT']
         sys.modules['utils.grok_utils'] = grok_stub
 
         ml_stub = types.ModuleType('utils.ml_utils')
@@ -86,6 +92,7 @@ def test_fallback_and_notify():
 
         onchain_stub = types.ModuleType('utils.onchain_utils')
         onchain_stub.get_oi_funding = lambda pair: ({'change': 0}, 0)
+        onchain_stub.get_dune_data = lambda: {'volume': 0}
         sys.modules['utils.onchain_utils'] = onchain_stub
 
         redis_stub = types.ModuleType('redis')
@@ -126,3 +133,23 @@ def test_fallback_and_notify():
                 sys.modules[k] = v
             else:
                 sys.modules.pop(k, None)
+
+
+def test_swapping_logic():
+    ae_mod = importlib.import_module('core.analytics_engine')
+    engine = ae_mod.AnalyticsEngine(['A/USDT', 'B/USDT', 'C/USDT'])
+    engine.max_active = 1
+    engine.pairs = ['A/USDT', 'B/USDT']
+    engine.metrics = {
+        'A/USDT': {'rating': 1},
+        'B/USDT': {'rating': 3},
+    }
+    engine.handle_swapping()
+    assert engine.pairs[0] == 'B/USDT'
+
+
+def test_detect_volatility():
+    ae_mod = importlib.import_module('core.analytics_engine')
+    engine = ae_mod.AnalyticsEngine(['A/USDT'])
+    engine.metrics = {'A/USDT': {'atr': 2, 'avg_atr': 0.5}}
+    assert engine.detect_volatility({'volume': 20})

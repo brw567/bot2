@@ -290,6 +290,11 @@ def get_grok_pair_recs(count: int, vol: float = 0.0) -> list[str]:
     return _cached_pairs
 
 
+def get_grok_pairs(count: int) -> list[str]:
+    """Wrapper used by AnalyticsEngine to fetch pairs respecting cache."""
+    return get_grok_pair_recs(count)
+
+
 async def get_grok_insights(symbol: str, vol: float = 0.0):
     """Return cached sentiment analysis for a symbol."""
     global _last_sentiment_call, _cached_sentiment

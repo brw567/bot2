@@ -68,6 +68,16 @@ def get_param(key: str, default=None):
     return row[0] if row else default
 
 
+def store_var(key: str, value: str) -> None:
+    """Public wrapper to store a configuration variable."""
+    save_param(key, value)
+
+
+def get_var(key: str, default=None):
+    """Public wrapper to retrieve a configuration variable."""
+    return get_param(key, default)
+
+
 def set_state(value: str) -> None:
     conn = _get_conn()
     if conn is None:
