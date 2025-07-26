@@ -118,9 +118,22 @@ class ContinuousAnalyzer:
             "trend": trend,
         }
 
-    def compute_success(self, sharpe: float, win_rate: float, slippage: float, vol: float) -> float:
-        """Return weighted success score based on performance metrics."""
-        return 0.5 * sharpe + 0.4 * win_rate - 0.05 * slippage - 0.05 * vol
+    def compute_vol(self, gas_history: list[float]) -> float:
+        """Return standard deviation of gas history."""
+        try:
+            arr = np.array(gas_history, dtype=float)
+            return float(arr.std()) if arr.size else 0.0
+        except Exception:
+            return 0.0
+
+    def compute_success(self, sharpe: float, win_rate: float, slippage: float, vol: float, pattern: str | None = None) -> float:
+        """Return weighted success score based on performance metrics and pattern."""
+        score = 0.5 * sharpe + 0.4 * win_rate - 0.05 * slippage - 0.05 * vol
+        if pattern == "breakout":
+            score += 0.1
+        elif pattern == "reversal":
+            score += 0.05
+        return score
 
     def should_switch(self, metrics: dict) -> bool:
         """Decide if strategy should switch based on Sharpe delta and VaR."""

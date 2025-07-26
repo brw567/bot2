@@ -3,9 +3,11 @@ import json
 from logging.handlers import RotatingFileHandler
 import redis
 from dune_client.client import DuneClient
+from dune_client.query import QueryBase, QueryParameter
 from config import (
     DUNE_API_KEY,
     DUNE_QUERY_ID,
+    DUNE_QUERY_IDS,
     REDIS_HOST,
     REDIS_PORT,
     REDIS_DB,
@@ -29,18 +31,22 @@ METRIC_KEYS = [
     "gas_history",
 ]
 
+SUPPORTED_SYMBOLS = {"BTC", "ETH", "SOL"}
+
 
 def fetch_dune_metrics(symbol: str = "BTC") -> dict:
-    """Fetch on-chain metrics from Dune with Redis caching."""
-    if symbol != "BTC":
-        logging.warning("Only BTC metrics supported currently")
+    """Fetch on-chain metrics from Dune with Redis caching for the given symbol."""
+    symbol = symbol.upper()
+    if symbol not in SUPPORTED_SYMBOLS:
+        logging.warning("Unsupported symbol %s", symbol)
         return {k: 0 for k in METRIC_KEYS}
 
-    metrics = {}
-    missing = []
+    metrics: dict[str, object] = {}
+    missing: list[str] = []
     for key in METRIC_KEYS:
+        r_key = f"{symbol}:{key}"
         try:
-            cached = redis_client.get(key)
+            cached = redis_client.get(r_key)
             if cached is not None:
                 if key == "gas_history":
                     metrics[key] = json.loads(cached)
@@ -51,28 +57,31 @@ def fetch_dune_metrics(symbol: str = "BTC") -> dict:
             else:
                 missing.append(key)
         except Exception as e:  # pragma: no cover - Redis failures rare in tests
-            logging.error(f"Redis fetch failed for {key}: {e}")
+            logging.error(f"Redis fetch failed for {r_key}: {e}")
             missing.append(key)
 
     if missing:
         try:
             client = DuneClient(DUNE_API_KEY)
-            client.execute_query(DUNE_QUERY_ID)
-            data = client.get_query_results(DUNE_QUERY_ID)
+            query_id = int(DUNE_QUERY_IDS.get(symbol, DUNE_QUERY_ID))
+            query = QueryBase(query_id, params=[QueryParameter.text_type("symbol", symbol)])
+            data = client.run_query(query)
+            rows = data.get_rows()
         except Exception as e:
             logging.error(f"Dune API fetch failed: {e}")
-            data = None
+            rows = []
 
-        if data and "rows" in data and data["rows"]:
-            row = data["rows"][0]
+        if rows:
+            row = rows[0]
             for key in missing:
                 value = row.get(key)
+                r_key = f"{symbol}:{key}"
                 if key == "gas_history":
                     value = value or []
                     try:
-                        redis_client.setex(key, 600, json.dumps(value))
+                        redis_client.setex(r_key, 600, json.dumps(value))
                     except Exception as e:  # pragma: no cover
-                        logging.error(f"Redis cache failed for {key}: {e}")
+                        logging.error(f"Redis cache failed for {r_key}: {e}")
                     metrics[key] = value
                 else:
                     value = value or 0
@@ -81,9 +90,9 @@ def fetch_dune_metrics(symbol: str = "BTC") -> dict:
                     else:
                         value = float(value)
                     try:
-                        redis_client.setex(key, 600, value)
+                        redis_client.setex(r_key, 600, value)
                     except Exception as e:  # pragma: no cover
-                        logging.error(f"Redis cache failed for {key}: {e}")
+                        logging.error(f"Redis cache failed for {r_key}: {e}")
                     metrics[key] = value
         else:
             logging.warning("No data returned from Dune")

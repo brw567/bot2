@@ -30,7 +30,17 @@ GROK_TIMEOUT = int(get_param('GROK_TIMEOUT', os.getenv("GROK_TIMEOUT", 10)))
 
 # Dune API for on-chain metrics (e.g., STH RPL via dune-client)
 DUNE_API_KEY = get_param('DUNE_API_KEY', os.getenv('DUNE_API_KEY'))
-DUNE_QUERY_ID = get_param('DUNE_QUERY_ID', os.getenv('DUNE_QUERY_ID'))  # Must be set to a valid Dune query ID
+DUNE_QUERY_ID = get_param('DUNE_QUERY_ID', os.getenv('DUNE_QUERY_ID'))  # Default query ID
+
+# Optional per-symbol query IDs for on-chain metrics
+DUNE_QUERY_ID_BTC = get_param('DUNE_QUERY_ID_BTC', os.getenv('DUNE_QUERY_ID_BTC', DUNE_QUERY_ID))
+DUNE_QUERY_ID_ETH = get_param('DUNE_QUERY_ID_ETH', os.getenv('DUNE_QUERY_ID_ETH', DUNE_QUERY_ID))
+DUNE_QUERY_ID_SOL = get_param('DUNE_QUERY_ID_SOL', os.getenv('DUNE_QUERY_ID_SOL', DUNE_QUERY_ID))
+DUNE_QUERY_IDS = {
+    'BTC': DUNE_QUERY_ID_BTC,
+    'ETH': DUNE_QUERY_ID_ETH,
+    'SOL': DUNE_QUERY_ID_SOL,
+}
 
 # Redis configuration for pub/sub messaging (winrate, ML updates via redis)
 REDIS_HOST = get_param('REDIS_HOST', os.getenv('REDIS_HOST', 'localhost'))

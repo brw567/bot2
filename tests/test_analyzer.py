@@ -54,7 +54,7 @@ from analyzer import ContinuousAnalyzer
 
 def test_compute_success():
     ca = ContinuousAnalyzer(None, [])
-    score = ca.compute_success(sharpe=1.0, win_rate=0.6, slippage=0.01, vol=0.1)
+    score = ca.compute_success(sharpe=1.0, win_rate=0.6, slippage=0.01, vol=0.1, pattern="breakout")
     assert score > 0
 
 
@@ -63,4 +63,10 @@ def test_compute_metrics():
     df = pd.DataFrame({'timestamp':[0,1,2], 'open':[1,1,1], 'high':[1,1,1], 'low':[1,1,1], 'close':[1,2,3], 'volume':[1,1,1]})
     metrics = ca.compute_metrics(df)
     assert 'sharpe' in metrics and 'rsi' in metrics
+
+
+def test_compute_vol():
+    ca = ContinuousAnalyzer(None, [])
+    vol = ca.compute_vol([10, 10, 10])
+    assert vol == 0.0
 
