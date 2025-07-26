@@ -11,7 +11,14 @@ import talib
 from st_aggrid import AgGrid, GridOptionsBuilder
 import redis
 from config import DB_PATH, DEFAULT_PARAMS, REDIS_HOST, REDIS_PORT, REDIS_DB, BINANCE_WEIGHT_LIMIT
-from db_utils import init_db, get_param, save_param
+from db_utils import (
+    init_db,
+    get_param,
+    save_param,
+    get_state,
+    set_state,
+    check_user,
+)
 from utils.binance_utils import get_binance_client
 from utils.grok_utils import (
     get_multi_sentiment_analysis,
@@ -152,6 +159,12 @@ async def monitoring_loop():
     
     while True:
         try:
+            state = get_state() or 'stopped'
+            st.session_state['state'] = state
+            if state != 'running' or not st.session_state.get('auth', False):
+                await asyncio.sleep(5)
+                continue
+
             # Quota monitoring
             if time.time() - last_reset >= 60:
                 weight_counter = 0
@@ -280,9 +293,26 @@ async def monitoring_loop():
 # GUI
 if __name__ == '__main__':
     init_db(DB_PATH)
+    state = get_state() or 'stopped'
+    st.session_state.setdefault('auth', False)
+    st.session_state['state'] = state
     params = {k: get_param(k, v) for k, v in DEFAULT_PARAMS.items()}
     logging.info(f"Loaded params: {params}")
     st.session_state['ml_model'] = train_model()[0]
+
+    if not st.session_state.get('auth'):
+        with st.form('login'):
+            username = st.text_input('Username')
+            password = st.text_input('Password', type='password')
+            submitted = st.form_submit_button('Login')
+        if submitted:
+            if check_user(username, password):
+                st.session_state['auth'] = True
+                st.success('Login successful')
+            else:
+                st.error('Invalid credentials')
+        if not st.session_state.get('auth'):
+            st.stop()
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -291,12 +321,12 @@ if __name__ == '__main__':
     # Sidebar for critical buttons (always visible)
     st.sidebar.title("Controls")
     st.sidebar.markdown("Use buttons below to control the bot.")
-    if st.sidebar.button('Pause Bot'):
-        logging.info("Bot paused")
-        # Pause logic
-    if st.sidebar.button('Resume Bot'):
-        logging.info("Bot resumed")
-        # Resume logic
+    if st.sidebar.button('Start'):
+        set_state('running')
+        st.session_state['state'] = 'running'
+    if st.sidebar.button('Stop'):
+        set_state('stopped')
+        st.session_state['state'] = 'stopped'
     if st.sidebar.button('Manual Trade'):
         logging.info("Manual trade triggered")
         # Manual trade logic
