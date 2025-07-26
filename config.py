@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from db_utils import get_param
 
 load_dotenv()
 
@@ -10,27 +11,27 @@ All secrets are stored in .env to prevent hardcoding.
 """
 
 # Exchange API credentials (used by ccxt, backtrader for trading)
-BINANCE_API_KEY = os.getenv('BINANCE_API_KEY')
-BINANCE_API_SECRET = os.getenv('BINANCE_API_SECRET')
+BINANCE_API_KEY = get_param('BINANCE_API_KEY', os.getenv('BINANCE_API_KEY'))
+BINANCE_API_SECRET = get_param('BINANCE_API_SECRET', os.getenv('BINANCE_API_SECRET'))
 
 # Telegram API credentials for notifications and sentiment analysis (telethon)
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-TELEGRAM_API_ID = int(os.getenv('TELEGRAM_API_ID'))
-TELEGRAM_API_HASH = os.getenv('TELEGRAM_API_HASH')
-TELEGRAM_SESSION = os.getenv('TELEGRAM_SESSION')
+TELEGRAM_TOKEN = get_param('TELEGRAM_TOKEN', os.getenv('TELEGRAM_TOKEN'))
+TELEGRAM_API_ID = int(get_param('TELEGRAM_API_ID', os.getenv('TELEGRAM_API_ID') or 0))
+TELEGRAM_API_HASH = get_param('TELEGRAM_API_HASH', os.getenv('TELEGRAM_API_HASH'))
+TELEGRAM_SESSION = get_param('TELEGRAM_SESSION', os.getenv('TELEGRAM_SESSION'))
 
 # Grok API for AI-driven risk assessment and parameter tuning (requests)
-GROK_API_KEY = os.getenv('GROK_API_KEY')
-GROK_TIMEOUT = int(os.getenv("GROK_TIMEOUT", 10))
+GROK_API_KEY = get_param('GROK_API_KEY', os.getenv('GROK_API_KEY'))
+GROK_TIMEOUT = int(get_param('GROK_TIMEOUT', os.getenv("GROK_TIMEOUT", 10)))
 
 # Dune API for on-chain metrics (e.g., STH RPL via dune-client)
-DUNE_API_KEY = os.getenv('DUNE_API_KEY')
-DUNE_QUERY_ID = os.getenv('DUNE_QUERY_ID')  # Must be set to a valid Dune query ID
+DUNE_API_KEY = get_param('DUNE_API_KEY', os.getenv('DUNE_API_KEY'))
+DUNE_QUERY_ID = get_param('DUNE_QUERY_ID', os.getenv('DUNE_QUERY_ID'))  # Must be set to a valid Dune query ID
 
 # Redis configuration for pub/sub messaging (winrate, ML updates via redis)
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')  # Default to localhost if not set
-REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
-REDIS_DB = int(os.getenv('REDIS_DB', 0))
+REDIS_HOST = get_param('REDIS_HOST', os.getenv('REDIS_HOST', 'localhost'))
+REDIS_PORT = int(get_param('REDIS_PORT', os.getenv('REDIS_PORT', 6379)))
+REDIS_DB = int(get_param('REDIS_DB', os.getenv('REDIS_DB', 0)))
 
 # Binance API rate limit (weights per minute, per 2025 docs)
 # Used for quota monitoring in scalping_bot.py
@@ -52,6 +53,6 @@ DEFAULT_PARAMS = {
 }
 
 # Analytics settings for ContinuousAnalyzer
-ANALYTICS_INTERVAL = int(os.getenv('ANALYTICS_INTERVAL', 300))  # seconds
-VOL_THRESHOLD = float(os.getenv('VOL_THRESHOLD', 0.05))
-GARCH_FLAG = os.getenv('GARCH_FLAG', 'False').lower() == 'true'
+ANALYTICS_INTERVAL = int(get_param('ANALYTICS_INTERVAL', os.getenv('ANALYTICS_INTERVAL', 300)))  # seconds
+VOL_THRESHOLD = float(get_param('VOL_THRESHOLD', os.getenv('VOL_THRESHOLD', 0.05)))
+GARCH_FLAG = (get_param('GARCH_FLAG', os.getenv('GARCH_FLAG', 'False')).lower() == 'true')
