@@ -22,3 +22,4 @@ streamlit-aggrid==1.1.7     # Interactive grid tables for trade logs in GUI
 scikit-learn==1.7.1         # Traditional ML for signal clustering
 statsmodels==0.14.5         # Time-series analysis for volatility/forecasting
 arch==7.2.0                 # GARCH models for conditional volatility
+sympy==1.12
