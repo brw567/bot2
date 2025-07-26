@@ -99,3 +99,14 @@ VOLATILITY_CHECK_INTERVAL = int(
 VOLATILITY_THRESHOLD_PERCENT = float(
     get_param('VOLATILITY_THRESHOLD_PERCENT', os.getenv('VOLATILITY_THRESHOLD_PERCENT', 50.0))
 )
+
+# Analytics engine defaults
+ANALYTICS_PAIRS = (
+    get_param('ANALYTICS_PAIRS', os.getenv('ANALYTICS_PAIRS', 'BTC/USDT,ETH/USDT'))
+    .split(',')
+)
+ANALYTICS_TIMEFRAME = get_param('ANALYTICS_TIMEFRAME', os.getenv('ANALYTICS_TIMEFRAME', '1m'))
+RSI_THRESHOLD = float(get_param('RSI_THRESHOLD', os.getenv('RSI_THRESHOLD', 50)))
+ATR_THRESHOLD = float(get_param('ATR_THRESHOLD', os.getenv('ATR_THRESHOLD', 0.0)))
+OI_THRESHOLD = float(get_param('OI_THRESHOLD', os.getenv('OI_THRESHOLD', 0.1)))
+FUNDING_THRESHOLD = float(get_param('FUNDING_THRESHOLD', os.getenv('FUNDING_THRESHOLD', 0.01)))

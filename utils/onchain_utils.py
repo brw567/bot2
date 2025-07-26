@@ -105,3 +105,11 @@ def fetch_sth_rpl(symbol: str = "BTC") -> float:
     """Return the latest STH RPL value using :func:`fetch_dune_metrics`."""
     metrics = fetch_dune_metrics(symbol)
     return float(metrics.get("sth_rpl", 0.0))
+
+
+def get_oi_funding(symbol: str) -> tuple[dict, float]:
+    """Return open interest change and funding rate for the symbol."""
+    metrics = fetch_dune_metrics(symbol)
+    oi_change = float(metrics.get("volume", 0))
+    funding = float(metrics.get("gas_fee", 0)) / 10000
+    return {"change": oi_change}, funding

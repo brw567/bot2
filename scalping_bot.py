@@ -11,7 +11,15 @@ import pandas as pd
 import talib
 from st_aggrid import AgGrid, GridOptionsBuilder
 import redis
-from config import DB_PATH, DEFAULT_PARAMS, REDIS_HOST, REDIS_PORT, REDIS_DB, BINANCE_WEIGHT_LIMIT
+from config import (
+    DB_PATH,
+    DEFAULT_PARAMS,
+    REDIS_HOST,
+    REDIS_PORT,
+    REDIS_DB,
+    BINANCE_WEIGHT_LIMIT,
+    ANALYTICS_PAIRS,
+)
 from db_utils import (
     init_db,
     get_param,
@@ -34,6 +42,7 @@ from utils.ml_utils import predict_next_price, train_model
 from strategies.arbitrage_strategy import ArbitrageStrategy
 from strategies.grid_strategy import GridStrategy
 from strategies.mev_strategy import MEVStrategy
+from core.analytics_engine import AnalyticsEngine
 from backtest import simple_backtest, advanced_backtest, ml_backtest
 
 handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
@@ -148,7 +157,7 @@ def get_signal_score(symbol, price, ta_score, sentiment, onchain_rpl, recent_dat
         logging.error(f"Signal score calculation failed: {e}")
         return 0.0
 
-async def monitoring_loop():
+async def monitoring_loop(engine: AnalyticsEngine):
     """
     Async monitoring loop for real-time trading.
     Fetches data, calculates signals, executes strategies, and monitors quotas/RPL spikes.
@@ -164,6 +173,7 @@ async def monitoring_loop():
     swap_pairs = st.session_state.get('swap_pairs', [])
     cooldown_until = st.session_state.get('cooldown_until', {})
     pair_scores = st.session_state.get('pair_scores', {})
+    strategy_state = st.session_state.get('strategy_state', {})
     
     while True:
         try:
@@ -288,9 +298,18 @@ async def monitoring_loop():
 
                 # Execute strategies only on configured trading pairs
                 if trade_enabled:
+                    metric = engine.metrics.get(pair, {})
+                    strat = metric.get('strategy')
+                    if strat and strategy_state.get(pair) != strat:
+                        logging.info(f"Switching {pair} to {strat} strategy")
+                        strategy_state[pair] = strat
                     if score > 0.7 and risk.trade == 'yes':
-                        GridStrategy().run(pair, price)
-                        ArbitrageStrategy().run(pair, f"{pair}:USDT")
+                        if strat == 'momentum':
+                            GridStrategy().run(pair, price)
+                        elif strat == 'arbitrage':
+                            ArbitrageStrategy().run(pair, f"{pair}:USDT")
+                        else:
+                            GridStrategy().run(pair, price)
                         weight_counter += request_weights['create_order']
                     MEVStrategy().detect_mev(pair)
 
@@ -325,6 +344,7 @@ async def monitoring_loop():
             st.session_state['swap_pairs'] = swap_pairs
             st.session_state['cooldown_until'] = cooldown_until
             st.session_state['pair_scores'] = pair_scores
+            st.session_state['strategy_state'] = strategy_state
 
             await asyncio.sleep(5)
         except Exception as e:
@@ -357,7 +377,12 @@ if __name__ == '__main__':
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    threading.Thread(target=lambda: loop.run_until_complete(monitoring_loop()), daemon=True).start()
+    engine = AnalyticsEngine(ANALYTICS_PAIRS)
+
+    async def runner():
+        await asyncio.gather(monitoring_loop(engine), engine.continuous_analyze())
+
+    threading.Thread(target=lambda: loop.run_until_complete(runner()), daemon=True).start()
 
     # Sidebar for critical buttons (always visible)
     st.sidebar.title("Controls")

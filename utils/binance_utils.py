@@ -28,6 +28,17 @@ def get_binance_client():
         logging.error(f"Binance client initialization failed: {e}")
         raise
 
+
+async def fetch_ohlcv_async(symbol: str, timeframe: str = '1m', limit: int = 100):
+    """Asynchronously fetch OHLCV data using CCXT."""
+    try:
+        client = get_binance_client()
+        ohlcv = await asyncio.to_thread(client.fetch_ohlcv, symbol, timeframe, limit=limit)
+        return ohlcv
+    except Exception as e:
+        logging.error(f"fetch_ohlcv_async failed for {symbol}: {e}")
+        raise
+
 def execute_trade(symbol, side, amount, price=None):
     """
     Execute a market or limit order on Binance.

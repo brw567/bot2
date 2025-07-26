@@ -1,7 +1,7 @@
 # Ultimate Crypto Scalping Bot
 
 ## Project Summary
-The Ultimate Crypto Scalping Bot is an advanced trading tool designed for high-frequency scalping in cryptocurrency markets, focusing on small price movements for quick profits. It integrates real-time data analysis (technical indicators, sentiment, on-chain metrics), AI-driven decisions (Grok for risk/tuning), machine learning predictions (LSTM), and automated executions on Binance (spot/futures). Key features include modular strategies (arbitrage, grid, MEV detection), risk management (dynamic SL/TP, Kelly sizing), backtesting (vectorbt/backtrader), and a Streamlit GUI with Telegram notifications.
+The Ultimate Crypto Scalping Bot is an advanced trading tool designed for high-frequency scalping in cryptocurrency markets, focusing on small price movements for quick profits. It integrates real-time data analysis (technical indicators, sentiment, on-chain metrics), AI-driven decisions (Grok for risk/tuning), machine learning predictions (LSTM), and automated executions on Binance (spot/futures). Key features include modular strategies (arbitrage, grid, MEV detection), real-time multi-pair analytics via the new `AnalyticsEngine`, risk management (dynamic SL/TP, Kelly sizing), backtesting (vectorbt/backtrader), and a Streamlit GUI with Telegram notifications.
 
 ### Pros
 - High-frequency scalping with >60% winrate target.
@@ -20,9 +20,9 @@ The Ultimate Crypto Scalping Bot is an advanced trading tool designed for high-f
 - Requires setup (API keys, Telethon session).
 - Crypto volatility/fees may erode profits.
 
-### High-Level Architecture (HLA)
+-### High-Level Architecture (HLA)
 - **Data Layer**: WebSocket (Binance), on-chain (Dune), Telegram channels.
-- **Analysis Layer**: TA-Lib indicators, LSTM ML, Grok AI, signal aggregation.
+- **Analysis Layer**: TA-Lib indicators, LSTM ML, Grok AI, `AnalyticsEngine` for multi-pair metrics.
 - **Strategy Layer**: BaseStrategy with arbitrage, grid, MEV.
 - **Execution Layer**: CCXT trades, async monitoring.
 - **UI/Control Layer**: Streamlit GUI, Telegram bots.

@@ -66,10 +66,13 @@ import config
 import utils.onchain_utils as ocu
 importlib.reload(config)
 importlib.reload(ocu)
-from utils.onchain_utils import fetch_dune_metrics, fetch_sth_rpl
+from utils.onchain_utils import fetch_dune_metrics, fetch_sth_rpl, get_oi_funding
 
 
 def test_fetch_dune_metrics():
     metrics = fetch_dune_metrics('BTC')
     assert metrics['volume'] == 2.0
     assert fetch_sth_rpl('BTC') == 1.0
+    oi, funding = get_oi_funding('BTC')
+    assert oi['change'] == 2.0
+    assert funding == 0.0004
