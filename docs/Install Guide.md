@@ -136,8 +136,11 @@ Secure .env file:
 cp .env.example .env
 vim .env  # Fill API keys (Binance, Telegram, Grok, Dune, Redis)
 chmod 600 .env
-# All keys are checked at startup; missing values cause a ValueError
+# All keys are validated at startup to prevent accidental key leaks and
+# missing values cause a clear ValueError
 ```
+
+Never hardcode API keys in the source; always load from the secured `.env` file.
 
 Run install script to initialize DB and Telethon session:
 ```

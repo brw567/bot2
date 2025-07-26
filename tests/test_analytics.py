@@ -120,6 +120,7 @@ def test_fallback_and_notify():
         m = engine.metrics['BTC/USDT']
         assert m['data_source'] == 'grok'
         assert calls and 'Switch to' in calls[0]
+        assert engine.last_switch_message == calls[0]
     finally:
         for k, v in originals.items():
             if v is not None:

@@ -420,6 +420,10 @@ if __name__ == '__main__':
         volatile_flag = r.get('market_volatile')
         vol_val = json.loads(volatile_flag)['volatile'] if volatile_flag else False
         st.metric('Market Volatile', str(vol_val))
+        engine_obj = st.session_state.get('engine')
+        if engine_obj and getattr(engine_obj, 'last_switch_message', None):
+            st.warning(engine_obj.last_switch_message)
+            engine_obj.last_switch_message = None
         if eng_metrics:
             dfm = pd.DataFrame.from_dict(eng_metrics, orient='index')
             def _hl(row):

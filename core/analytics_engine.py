@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 from logging.handlers import RotatingFileHandler
+import os
 from typing import Iterable, Dict
 
 import pandas as pd
@@ -21,6 +22,7 @@ import config
 handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
 logging.basicConfig(level=logging.INFO, handlers=[handler],
                     format='%(asctime)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 STRATEGY_MAP = {
     'trending': 'momentum',
@@ -35,6 +37,7 @@ class AnalyticsEngine:
         self.pairs = list(pairs)
         self.timeframe = timeframe
         self.metrics: Dict[str, dict] = {}
+        self.last_switch_message: str | None = None
         try:
             self.redis = redis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT, db=config.REDIS_DB)
         except Exception:
@@ -44,6 +47,9 @@ class AnalyticsEngine:
         missing = [k for k in required if not getattr(config, k, None)]
         if missing:
             raise ValueError(f"Missing API keys: {', '.join(missing)}")
+        env_missing = [k for k in required if not os.getenv(k)]
+        if env_missing:
+            raise ValueError(f"Missing env key: {', '.join(env_missing)}")
 
     async def fetch_data(self, pair: str, limit: int = 100) -> pd.DataFrame:
         """Return OHLCV dataframe for the pair with Grok fallback."""
@@ -54,7 +60,7 @@ class AnalyticsEngine:
             df['source'] = 'binance'
             df = add_all_ta_features(df, open='open', high='high', low='low', close='close', volume='volume')
         except Exception as e:
-            logging.error(f"Binance fetch failed for {pair}: {e}")
+            logger.error(f"Binance fetch failed for {pair}: {e}")
             from utils.grok_utils import grok_fetch_ohlcv  # local import to avoid overhead
             ohlcv = await grok_fetch_ohlcv(pair, self.timeframe, limit)
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
@@ -103,23 +109,25 @@ class AnalyticsEngine:
                 prev = self.metrics.get(pair, {})
                 self.metrics[pair] = metrics
                 if prev.get('strategy') and prev.get('strategy') != metrics['strategy']:
+                    msg = f"Switch to {metrics['strategy']} on {pair}"
+                    self.last_switch_message = msg
                     try:
                         from utils.telegram_utils import send_notification
-                        await send_notification(f"Switch to {metrics['strategy']} on {pair}")
+                        await send_notification(msg)
                     except Exception as e:
-                        logging.error(f"Notification failed: {e}")
+                        logger.error(f"Notification failed: {e}")
                 if self.redis:
                     try:
                         self.redis.set(f"metrics:{pair}", json.dumps(metrics))
                     except Exception as e:  # pragma: no cover - Redis optional
-                        logging.error(f"Redis store failed: {e}")
+                        logger.error(f"Redis store failed: {e}")
             except Exception as e:  # pragma: no cover - network issues
-                logging.error(f"Analytics error for {pair}: {e}")
+                logger.error(f"Analytics error for {pair}: {e}")
                 try:
                     from utils.telegram_utils import send_alert
                     await send_alert(f"Analysis failed for {pair}: {e}")
                 except Exception as err:
-                    logging.error(f"Alert failed: {err}")
+                    logger.error(f"Alert failed: {err}")
 
     async def continuous_analyze(self, interval: int = 60):
         """Run continuous analysis loop."""
@@ -127,10 +135,10 @@ class AnalyticsEngine:
             try:
                 await self.analyze_once()
             except Exception as e:  # pragma: no cover - top level errors
-                logging.error(f"continuous_analyze failed: {e}")
+                logger.error(f"continuous_analyze failed: {e}")
                 try:
                     from utils.telegram_utils import send_alert
                     await send_alert(f"Continuous analyze failure: {e}")
                 except Exception as err:
-                    logging.error(f"Alert failed: {err}")
+                    logger.error(f"Alert failed: {err}")
             await asyncio.sleep(interval)

@@ -7,7 +7,7 @@ import pandas as pd
 # Stub external libraries used by backtest module
 ccxt_stub = types.ModuleType('ccxt')
 class DummyBinance:
-    def fetch_ohlcv(self, pair, timeframe='1d', limit=10):
+    def fetch_ohlcv(self, pair, timeframe='1d', since=None, limit=10):
         return [[i,1,1,1,1+i,1] for i in range(limit)]
 ccxt_stub.binance = lambda *a, **k: DummyBinance()
 sys.modules['ccxt'] = ccxt_stub
@@ -18,6 +18,10 @@ bu.get_binance_client = lambda: DummyBinance()
 talib_stub = types.ModuleType('talib')
 talib_stub.EMA = lambda arr, timeperiod=12: pd.Series(arr)
 talib_stub.RSI = lambda arr, timeperiod=14: pd.Series([50]*len(arr))
+def _macd(arr, fastperiod=12, slowperiod=26, signalperiod=9):
+    return pd.Series(arr), pd.Series(arr), pd.Series([1]*len(arr))
+talib_stub.MACD = _macd
+talib_stub.ATR = lambda h,l,c,timeperiod=14: pd.Series([1]*len(c))
 sys.modules['talib'] = talib_stub
 
 vectorbt_stub = types.ModuleType('vectorbt')
@@ -111,19 +115,6 @@ def test_multi_backtest_returns_metrics():
 
 
 def test_switching_backtest():
-    async def _fake_fetch(self, pair, limit=100):
-        return pd.DataFrame(
-            [[i,1,1,1,1+i,1] for i in range(limit)],
-            columns=['timestamp','open','high','low','close','volume']
-        ).assign(momentum_rsi=55, trend_macd_diff=1, volatility_atr=0.5)
-
-    async def _fake_analyze_once(self):
-        for p in self.pairs:
-            self.metrics[p] = {'pattern': 'trending'}
-
-    ae.AnalyticsEngine.fetch_data = _fake_fetch
-    ae.AnalyticsEngine.analyze_once = _fake_analyze_once
-    sys.modules['core.analytics_engine'] = ae
     ml = types.ModuleType('utils.ml_utils')
     ml.fetch_historical_data = lambda *a, **k: None
     ml.train_model = lambda *a, **k: (None,0.0,0.0)
@@ -131,6 +122,8 @@ def test_switching_backtest():
     ml.lstm_predict = lambda df: {'confidence':0.8}
     sys.modules['utils.ml_utils'] = ml
     importlib.reload(backtest)
+    backtest.ccxt = ccxt_stub
+    assert hasattr(backtest.ccxt.binance(), 'fetch_ohlcv')
     res = backtest.switching_backtest(['BTC/USDT'])
     assert {'sharpe', 'winrate', 'max_dd'} <= set(res)
     assert res['winrate'] > 60
