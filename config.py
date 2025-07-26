@@ -67,6 +67,13 @@ DEFAULT_PARAMS = {
     'swap_pair_multiplier': 10,
     'volatility_check_interval': 4 * 60 * 60,
     'volatility_threshold_percent': 50.0,
+    'grok_interval': 4 * 60 * 60,
+    'dune_interval': 10 * 60,
+    'analytics_interval': 60,
+    'swap_threshold': 1.5,
+    'cooldown': 45 * 60,
+    'forecast_period': 4 * 60 * 60,
+    'history_period': 24 * 60 * 60,
 }
 
 # Analytics settings for ContinuousAnalyzer

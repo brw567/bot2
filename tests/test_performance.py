@@ -15,6 +15,7 @@ sys.modules['utils.ml_utils'] = ml_stub
 
 onchain_stub = types.ModuleType('utils.onchain_utils')
 onchain_stub.get_oi_funding = lambda pair: ({'change': 0}, 0)
+onchain_stub.get_dune_data = lambda: {}
 sys.modules['utils.onchain_utils'] = onchain_stub
 
 redis_stub = types.ModuleType('redis')

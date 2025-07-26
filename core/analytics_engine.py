@@ -3,6 +3,7 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 from typing import Iterable, Dict
+import time
 import os
 
 import pandas as pd
@@ -15,7 +16,10 @@ except Exception:  # pragma: no cover - optional dep
 
 from utils.binance_utils import get_binance_client
 from utils.ml_utils import lstm_predict
-from utils.onchain_utils import get_oi_funding
+from utils.onchain_utils import get_oi_funding, get_dune_data
+from utils.grok_utils import get_grok_pairs
+from utils.config import load_config_from_db
+from db_utils import store_var
 import redis
 import config
 
@@ -33,9 +37,23 @@ class AnalyticsEngine:
     """Asynchronous engine for continuous multi-pair analytics."""
 
     def __init__(self, pairs: Iterable[str], timeframe: str = '1m'):
-        self.pairs = list(pairs)
+        cfg = load_config_from_db()
+        self.max_active = int(cfg.get('max_active_pairs', cfg.get('auto_pair_limit', 5)))
+        self.swap_multiplier = int(cfg.get('swap_pair_multiplier', 10))
+        self.grok_interval = int(cfg.get('grok_interval', 4 * 60 * 60))
+        self.dune_interval = int(cfg.get('dune_interval', 600))
+        self.analytics_interval = int(cfg.get('analytics_interval', 60))
+        self.swap_threshold = float(cfg.get('swap_threshold', 1.5))
+        self.cooldown = int(cfg.get('cooldown', 45 * 60))
+        self.forecast_period = int(cfg.get('forecast_period', 4 * 60 * 60))
+        self.history_period = int(cfg.get('history_period', 24 * 60 * 60))
         self.timeframe = timeframe
         self.metrics: Dict[str, dict] = {}
+        self.active_pairs = list(pairs)[: self.max_active]
+        self.swap_pairs = list(pairs)[self.max_active : self.max_active * self.swap_multiplier]
+        self.pairs = self.active_pairs + self.swap_pairs
+        self.cooldowns: Dict[str, float] = {}
+        self.volatile = False
         try:
             self.redis = redis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT, db=config.REDIS_DB)
         except Exception:
@@ -116,8 +134,10 @@ class AnalyticsEngine:
                     metrics.update({'pattern': 'hold', 'strategy': 'hold', 'oi_change': oi_change})
                 metrics['funding_rate'] = funding
                 metrics['data_source'] = df['source'].iloc[-1] if 'source' in df else 'binance'
+                metrics['rating'] = self.smart_rating(metrics, forecast=self.forecast_period)
                 prev = self.metrics.get(pair, {})
                 self.metrics[pair] = metrics
+                self.volatile = self.volatile or self.detect_volatility(metrics, oi_change)
                 if prev.get('strategy') and prev.get('strategy') != metrics['strategy']:
                     try:
                         from utils.telegram_utils import send_notification
@@ -137,11 +157,69 @@ class AnalyticsEngine:
                 except Exception as err:
                     logging.error(f"Alert failed: {err}")
 
-    async def continuous_analyze(self, interval: int = 60):
-        """Run continuous analysis loop."""
+    def smart_rating(self, metrics: dict, forecast: int) -> float:
+        """Return a simple combined rating for a pair."""
+        return (
+            0.4 * metrics.get('sharpe', 0) +
+            0.3 * (metrics.get('rsi', 50) / 100) +
+            0.3 * (metrics.get('oi_change', 0) / 100)
+        )
+
+    def detect_volatility(self, metrics: dict, oi_change: float) -> bool:
+        return metrics.get('atr', 0) > metrics.get('avg_atr', 1) * 2 or oi_change > 10
+
+    def handle_swapping(self):
+        if not self.swap_pairs:
+            return
+        ratings = {p: self.metrics.get(p, {}).get('rating', 0) for p in self.pairs}
+        if not ratings:
+            return
+        low = min(self.active_pairs, key=lambda p: ratings.get(p, 0)) if self.active_pairs else None
+        high = max(self.swap_pairs, key=lambda p: ratings.get(p, 0)) if self.swap_pairs else None
+        if not low or not high:
+            return
+        if ratings.get(high, 0) > ratings.get(low, 0) * self.swap_threshold:
+            if self.cooldowns.get(low, 0) <= time.time():
+                self.cooldowns[low] = time.time() + self.cooldown
+                self.active_pairs.remove(low)
+                self.swap_pairs.remove(high)
+                self.swap_pairs.append(low)
+                self.active_pairs.append(high)
+                self.pairs = self.active_pairs + self.swap_pairs
+                store_var('last_swap', f'{low}->{high}')
+
+    async def update_pairs(self):
+        while True:
+            all_pairs = get_grok_pairs(self.max_active * self.swap_multiplier)
+            self.active_pairs = all_pairs[: self.max_active]
+            self.swap_pairs = all_pairs[self.max_active:]
+            self.pairs = self.active_pairs + self.swap_pairs
+            await asyncio.sleep(self.grok_interval / 2 if self.volatile else self.grok_interval)
+
+    async def dune_cache(self):
+        while True:
+            data = get_dune_data()
+            if isinstance(data, dict):
+                self.volatile = self.volatile or data.get('oi_change', 0) > 10
+            if self.redis:
+                try:
+                    self.redis.set('market_volatile', json.dumps({'volatile': self.volatile}))
+                except Exception:
+                    pass
+            await asyncio.sleep(self.dune_interval)
+
+    async def continuous_analyze(self, interval: int | None = None):
+        """Run continuous analysis loop with dynamic intervals."""
+        if not getattr(self, "_tasks_started", False):
+            self._tasks_started = True
+            asyncio.create_task(self.update_pairs())
+            asyncio.create_task(self.dune_cache())
+        interval = interval or self.analytics_interval
         while True:
             try:
+                self.volatile = False
                 await self.analyze_once()
+                self.handle_swapping()
             except Exception as e:  # pragma: no cover - top level errors
                 logging.error(f"continuous_analyze failed: {e}")
                 try:
@@ -149,4 +227,5 @@ class AnalyticsEngine:
                     await send_alert(f"Continuous analyze failure: {e}")
                 except Exception as err:
                     logging.error(f"Alert failed: {err}")
-            await asyncio.sleep(interval)
+            await asyncio.sleep(30 if self.volatile else interval)
+
