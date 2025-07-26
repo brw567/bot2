@@ -2,7 +2,7 @@ import ccxt
 import logging
 from logging.handlers import RotatingFileHandler
 import asyncio
-from config import BINANCE_API_KEY, BINANCE_API_SECRET
+from config import BINANCE_API_KEY, BINANCE_API_SECRET, MIN_BALANCE_THRESHOLD
 
 handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
 logging.basicConfig(level=logging.INFO, handlers=[handler],
@@ -79,3 +79,32 @@ def execute_trade(symbol, side, amount, price=None):
     except Exception as e:
         logging.error(f"Trade execution failed for {symbol}: {e}")
         raise
+
+
+def get_balance():
+    """Fetch account balances and update analyzer pairs."""
+    try:
+        client = get_binance_client()
+        bal = client.fetch_balance()
+        assets = bal.get("total") if isinstance(bal, dict) else {}
+        if not isinstance(assets, dict):
+            assets = bal
+        try:
+            from analyzer import pairs as analyzer_pairs
+        except Exception:
+            analyzer_pairs = None
+        for asset, amount in (assets or {}).items():
+            try:
+                if asset == "USDT" or amount is None:
+                    continue
+                if float(amount) > MIN_BALANCE_THRESHOLD:
+                    pair = f"{asset}/USDT"
+                    if analyzer_pairs is not None and pair not in analyzer_pairs:
+                        analyzer_pairs.add(pair)
+                        logging.info(f"Added {pair} based on balance {amount}")
+            except Exception:
+                continue
+        return assets
+    except Exception as e:
+        logging.error(f"Balance fetch failed: {e}")
+        return {}
