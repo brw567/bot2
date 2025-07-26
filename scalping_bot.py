@@ -11,6 +11,7 @@ import talib
 from st_aggrid import AgGrid, GridOptionsBuilder
 import redis
 from config import DB_PATH, DEFAULT_PARAMS, REDIS_HOST, REDIS_PORT, REDIS_DB, BINANCE_WEIGHT_LIMIT
+from db_utils import init_db, get_param, save_param
 from utils.binance_utils import get_binance_client
 from utils.grok_utils import (
     get_multi_sentiment_analysis,
@@ -47,126 +48,6 @@ def redis_subscriber():
                 st.session_state['ml_prediction'] = data['prediction']
 
 threading.Thread(target=redis_subscriber, daemon=True).start()
-
-def init_db():
-    """Create required SQLite tables and insert default settings."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS settings
-                      (key TEXT PRIMARY KEY, value TEXT)''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS pair_settings
-                      (pair TEXT, key TEXT, value TEXT, PRIMARY KEY (pair, key))''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS trades
-                      (id INTEGER PRIMARY KEY, symbol TEXT, profit FLOAT, timestamp DATETIME)''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS indicators_cache
-                      (pair TEXT PRIMARY KEY,
-                       price REAL,
-                       vol REAL,
-                       candles TEXT,
-                       risk TEXT,
-                       sentiment TEXT,
-                       timestamp REAL)''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS monitor_pairs
-                      (pair TEXT PRIMARY KEY)''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS pair_metrics
-                      (pair TEXT PRIMARY KEY,
-                       trade_count INTEGER,
-                       profit REAL,
-                       winrate REAL)''')
-    for k, v in DEFAULT_PARAMS.items():
-        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (k, str(v)))
-    conn.commit()
-    conn.close()
-
-def load_params(pair=None):
-    """Load global or per-pair parameters from the database."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    if pair:
-        cursor.execute("SELECT key, value FROM pair_settings WHERE pair=?", (pair,))
-        params = {row[0]: float(row[1]) if row[1].replace('.', '', 1).isdigit() else row[1] for row in cursor.fetchall()}
-    else:
-        cursor.execute("SELECT * FROM settings")
-        params = {row[0]: float(row[1]) if row[1].replace('.', '', 1).isdigit() else row[1] for row in cursor.fetchall()}
-    conn.close()
-    return params
-
-def save_params(pair, params):
-    """Save parameters globally or per pair."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    if pair:
-        cursor.execute("DELETE FROM pair_settings WHERE pair=?", (pair,))
-        cursor.executemany(
-            "INSERT INTO pair_settings (pair, key, value) VALUES (?, ?, ?)",
-            [(pair, k, str(v)) for k, v in params.items()],
-        )
-    else:
-        for k, v in params.items():
-            cursor.execute(
-                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (k, str(v))
-            )
-    conn.commit()
-    conn.close()
-
-
-def load_trading_pairs():
-    """Return list of trading pairs from DB or default."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT pair FROM pair_settings")
-    pairs = [row[0] for row in cursor.fetchall()]
-    conn.close()
-    if not pairs:
-        pairs = ['BTC/USDT', 'ETH/USDT']
-    if 'BTC/USDT' not in pairs:
-        pairs.append('BTC/USDT')
-    return pairs
-
-
-def load_monitor_pairs():
-    """Return list of Grok recommended pairs for analytics."""
-    limit = int(load_params().get('auto_pair_limit', 10)) * 5
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT pair FROM monitor_pairs")
-    pairs = [row[0] for row in cursor.fetchall()]
-    if len(pairs) != limit:
-        try:
-            from utils.grok_utils import get_recommended_pairs
-            pairs = get_recommended_pairs(limit)
-            cursor.execute("DELETE FROM monitor_pairs")
-            cursor.executemany("INSERT INTO monitor_pairs (pair) VALUES (?)", [(p,) for p in pairs])
-            conn.commit()
-        except Exception as e:
-            logging.error(f"Failed to refresh monitor pairs: {e}")
-    conn.close()
-    return pairs
-
-
-def update_pair_metrics():
-    """Aggregate trading metrics per pair for analytics."""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql("SELECT symbol, profit FROM trades", conn)
-        if df.empty:
-            conn.close()
-            return
-        metrics = (
-            df.groupby('symbol')['profit']
-            .agg(trade_count='count', profit='sum', winrate=lambda x: (x > 0).mean())
-        )
-        cursor = conn.cursor()
-        for symbol, row in metrics.iterrows():
-            cursor.execute(
-                "INSERT OR REPLACE INTO pair_metrics (pair, trade_count, profit, winrate) VALUES (?, ?, ?, ?)",
-                (symbol, int(row.trade_count), float(row.profit), float(row.winrate)),
-            )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logging.error(f"Update metrics failed: {e}")
-
 
 # Simple in-memory cache for recent OHLCV data
 CANDLE_CACHE = {}
@@ -281,9 +162,9 @@ async def monitoring_loop():
                 continue
 
             client = get_binance_client()
-            pair_limit = int(load_params().get('auto_pair_limit', 10))
-            trading_pairs = load_trading_pairs()[:pair_limit]
-            monitor_pairs = load_monitor_pairs()
+            pair_limit = int(get_param('auto_pair_limit', 10))
+            trading_pairs = ['BTC/USDT', 'ETH/USDT'][:pair_limit]
+            monitor_pairs = []
             pairs = trading_pairs + [p for p in monitor_pairs if p not in trading_pairs]
             fallback_info = {}
             symbols = [p.split('/')[0] for p in pairs]
@@ -389,7 +270,6 @@ async def monitoring_loop():
             conn.commit()
             conn.close()
             r.publish('winrate_updates', json.dumps({'winrate': winrate}))
-            update_pair_metrics()
             st.session_state['fallback_pairs'] = fallback_info
 
             await asyncio.sleep(5)
@@ -399,8 +279,8 @@ async def monitoring_loop():
 
 # GUI
 if __name__ == '__main__':
-    init_db()
-    params = load_params()
+    init_db(DB_PATH)
+    params = {k: get_param(k, v) for k, v in DEFAULT_PARAMS.items()}
     logging.info(f"Loaded params: {params}")
     st.session_state['ml_model'] = train_model()[0]
 
@@ -483,9 +363,9 @@ if __name__ == '__main__':
         symbols = ['BTC/USDT', 'ETH/USDT']  # Example; extend dynamically
         selected_pair = st.selectbox('Select Pair', symbols + ['Global'])
         if selected_pair == 'Global':
-            params = load_params()
+            params = {k: get_param(k, v) for k, v in DEFAULT_PARAMS.items()}
         else:
-            params = load_params(selected_pair)
+            params = {k: get_param(f"{selected_pair}_{k}", v) for k, v in DEFAULT_PARAMS.items()}
         disabled = st.session_state.get('auto_mode', False)
 
         st.subheader('Risk Management', help="Adjust risk parameters. Locked in auto mode.")
@@ -505,13 +385,17 @@ if __name__ == '__main__':
                 if st.button('Apply All'):
                     updated = {row['Parameter']: row['Value'] for row in grid['data']}
                     updated['risk_per_trade'] = rec_risk
-                    save_params(None if selected_pair == 'Global' else selected_pair, updated)
+                    for k, v in updated.items():
+                        key = k if selected_pair == 'Global' else f"{selected_pair}_{k}"
+                        save_param(key, v)
                     st.success('Settings updated')
             with col3:
                 st.button('Ignore')
         if st.button('Save Parameters', disabled=disabled):
             updated = {row['Parameter']: row['Value'] for row in grid['data']}
-            save_params(None if selected_pair == 'Global' else selected_pair, updated)
+            for k, v in updated.items():
+                key = k if selected_pair == 'Global' else f"{selected_pair}_{k}"
+                save_param(key, v)
             st.success('Settings updated')
 
         st.subheader('Telegram Configuration', help="Full Telegram setup, including channels.")
