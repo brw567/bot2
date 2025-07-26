@@ -105,3 +105,16 @@ def fetch_sth_rpl(symbol: str = "BTC") -> float:
     """Return the latest STH RPL value using :func:`fetch_dune_metrics`."""
     metrics = fetch_dune_metrics(symbol)
     return float(metrics.get("sth_rpl", 0.0))
+
+
+def get_oi_funding(pair: str):
+    """Placeholder open interest change and funding rate."""
+    try:
+        base = pair.split("/")[0]
+        metrics = fetch_dune_metrics(base)
+        oi_change = metrics.get("volume", 0.0)
+        funding_rate = metrics.get("gas_fee", 0.0) / 1000
+        return {"change": oi_change}, funding_rate
+    except Exception as e:  # pragma: no cover - network issues
+        logging.error(f"get_oi_funding failed for {pair}: {e}")
+        return {"change": 0.0}, 0.0

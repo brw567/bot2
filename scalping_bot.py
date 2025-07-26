@@ -420,7 +420,11 @@ if __name__ == '__main__':
         st.metric('Market Volatile', str(vol_val))
         eng_metrics = st.session_state.get('engine').metrics if 'engine' in st.session_state else {}
         if eng_metrics:
-            st.dataframe(pd.DataFrame.from_dict(eng_metrics, orient='index'))
+            dfm = pd.DataFrame.from_dict(eng_metrics, orient='index')
+            def highlight(row):
+                color = 'yellow' if row.get('source') == 'grok' else ''
+                return ['background-color: %s' % color]*len(row)
+            st.dataframe(dfm.style.apply(highlight, axis=1))
         st.write('Active pairs:', ', '.join(st.session_state.get('active_pairs', [])))
         st.write('Swap pairs:', ', '.join(st.session_state.get('swap_pairs', [])))
         cds = st.session_state.get('cooldown_until', {})

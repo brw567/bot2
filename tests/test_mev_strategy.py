@@ -19,7 +19,9 @@ os.environ.setdefault('TELEGRAM_API_ID', '1')
 os.environ.setdefault('TELEGRAM_API_HASH', 'x')
 os.environ.setdefault('TELEGRAM_SESSION', 'x')
 os.environ.setdefault('BINANCE_API_KEY', 'x')
-os.environ.setdefault('BINANCE_API_SECRET', 'x')
+os.environ['BINANCE_API_SECRET'] = 'x'
+os.environ.setdefault('GROK_API_KEY', 'x')
+os.environ.setdefault('TELEGRAM_TOKEN', 'x')
 
 from strategies.mev_strategy import MEVStrategy
 

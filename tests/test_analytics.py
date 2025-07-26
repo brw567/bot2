@@ -5,7 +5,7 @@ import asyncio
 
 
 def test_analyze_once():
-    originals = {k: sys.modules.get(k) for k in ['utils.binance_utils','utils.ml_utils','utils.onchain_utils','redis','ta','dotenv']}
+    originals = {k: sys.modules.get(k) for k in ['utils.binance_utils','utils.ml_utils','utils.onchain_utils','redis','ta','dotenv','utils.telegram_utils','utils.grok_utils']}
     try:
         binance_stub = types.ModuleType('utils.binance_utils')
         class DummyClient:
@@ -39,12 +39,29 @@ def test_analyze_once():
         dotenv_stub.load_dotenv = lambda *a, **k: None
         sys.modules['dotenv'] = dotenv_stub
 
+        tele_stub = types.ModuleType('utils.telegram_utils')
+        async def send_notification(msg):
+            send_notification.called = msg
+        tele_stub.send_notification = send_notification
+        sys.modules['utils.telegram_utils'] = tele_stub
+
+        grok_stub = types.ModuleType('utils.grok_utils')
+        async def grok_fetch_ohlcv(pair, tf, limit):
+            return [[i,1,1,1,1+i,1] for i in range(limit)]
+        grok_stub.grok_fetch_ohlcv = grok_fetch_ohlcv
+        sys.modules['utils.grok_utils'] = grok_stub
+
         ae = importlib.import_module('core.analytics_engine')
         importlib.reload(ae)
         engine = ae.AnalyticsEngine(['BTC/USDT'])
         asyncio.run(engine.analyze_once())
         assert 'BTC/USDT' in engine.metrics
         assert engine.metrics['BTC/USDT']['strategy'] == 'momentum'
+        # Trigger fallback and strategy switch
+        ae.get_binance_client = lambda: (_ for _ in ()).throw(Exception('fail'))
+        ta_stub.add_all_ta_features = lambda df, **k: df.assign(momentum_rsi=30, trend_macd_diff=-1, volatility_atr=0.2)
+        asyncio.run(engine.analyze_once())
+        assert engine.metrics['BTC/USDT']['source'] == 'grok'
     finally:
         for k, v in originals.items():
             if v is not None:

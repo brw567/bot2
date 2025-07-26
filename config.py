@@ -104,3 +104,10 @@ VOLATILITY_THRESHOLD_PERCENT = float(
 ANALYTICS_PAIRS = os.getenv('ANALYTICS_PAIRS', 'BTC/USDT,ETH/USDT').split(',')
 ANALYTICS_TIMEFRAME = os.getenv('ANALYTICS_TIMEFRAME', '1m')
 CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', 0.7))
+
+# Validate required environment keys to avoid accidental leaks
+_REQUIRED_KEYS = ['BINANCE_API_KEY', 'BINANCE_API_SECRET', 'GROK_API_KEY',
+                  'TELEGRAM_TOKEN']
+for _k in _REQUIRED_KEYS:
+    if not globals().get(_k):
+        raise EnvironmentError(f"Missing required key: {_k}")

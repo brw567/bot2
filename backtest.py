@@ -16,8 +16,12 @@ logging.basicConfig(level=logging.INFO, handlers=[handler],
                     format='%(asctime)s - %(message)s')
 
 
-def multi_backtest(pairs, timeframe='1d', limit=365):
-    """Backtest multiple pairs and aggregate performance metrics."""
+def multi_backtest(pairs, timeframe='1d', limit=365, simulate_switches=False):
+    """Backtest multiple pairs and aggregate performance metrics.
+
+    If ``simulate_switches`` is True, positions are toggled at random intervals
+    to emulate strategy changes.
+    """
     try:
         client = ccxt.binance({'apiKey': BINANCE_API_KEY, 'secret': BINANCE_API_SECRET})
         returns_list = []
@@ -33,6 +37,8 @@ def multi_backtest(pairs, timeframe='1d', limit=365):
             pos[entry] = 1
             pos[exit] = 0
             pos = pos.ffill().fillna(0)
+            if simulate_switches:
+                pos.iloc[::10] = 0  # crude switch every 10 candles
             rets = pos.shift(1) * df['close'].pct_change().fillna(0)
             rets.name = sym
             returns_list.append(rets)

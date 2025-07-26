@@ -62,8 +62,10 @@ sys.modules['utils.ml_utils'] = ml_utils_stub
 sys.modules['torch'] = types.ModuleType('torch')
 
 # Environment variables for config
-os.environ.setdefault('BINANCE_API_KEY', 'x')
-os.environ.setdefault('BINANCE_API_SECRET', 'y')
+os.environ['BINANCE_API_KEY'] = 'x'
+os.environ['BINANCE_API_SECRET'] = 'y'
+os.environ.setdefault('GROK_API_KEY', 'x')
+os.environ.setdefault('TELEGRAM_TOKEN', 'x')
 
 import importlib
 import backtest
