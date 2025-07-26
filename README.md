@@ -25,7 +25,7 @@ The Ultimate Crypto Scalping Bot is an advanced trading tool designed for high-f
 - **Strategy Layer**: BaseStrategy with arbitrage, grid, MEV.
 - **Execution Layer**: CCXT trades, async monitoring.
 - **UI/Control Layer**: Streamlit GUI, Telegram bots.
-- **Persistence**: SQLite (params/trades), HDF5 (historical), Redis (pub/sub).
+- **Persistence**: SQLite (params/trades), HDF5 (historical), Redis (pub/sub and message cache).
 
 ### Low-Level Architecture (LLA)
 - Utils: binance/ccxt/grok/ml/onchain/telegram_utils.py.
