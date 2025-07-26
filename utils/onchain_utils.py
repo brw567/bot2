@@ -1,44 +1,98 @@
 import logging
+import json
 from logging.handlers import RotatingFileHandler
+import redis
 from dune_client.client import DuneClient
-from config import DUNE_API_KEY, DUNE_QUERY_ID
+from config import (
+    DUNE_API_KEY,
+    DUNE_QUERY_ID,
+    REDIS_HOST,
+    REDIS_PORT,
+    REDIS_DB,
+)
 
 handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
 logging.basicConfig(level=logging.INFO, handlers=[handler],
                     format='%(asctime)s - %(message)s')
 
-def fetch_sth_rpl(symbol='BTC'):
-    """
-    Fetch Short-Term Holder Realized Price (STH RPL) for Bitcoin via Dune API.
+# Redis connection for caching on-chain metrics
+redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
 
-    Args:
-        symbol (str): Asset symbol (default 'BTC'; only BTC supported currently).
+# Metrics available from the Dune query
+METRIC_KEYS = [
+    "sth_rpl",
+    "volume",
+    "whale_transfers",
+    "gas_fee",
+    "price_diff",
+    "mempool_density",
+    "gas_history",
+]
 
-    Returns:
-        float: Latest STH RPL value; 0.0 on failure.
 
-    Note: Uses dune-client for simplified API calls, addressing immediate task.
-    Requires valid DUNE_QUERY_ID from config.py (set to Dune query for STH RPL).
-    Fallback to 0.0 ensures signal scoring robustness on API failure.
-    """
-    try:
-        if symbol != 'BTC':
-            logging.warning(f"STH RPL only supported for BTC, not {symbol}")
-            return 0.0
+def fetch_dune_metrics(symbol: str = "BTC") -> dict:
+    """Fetch on-chain metrics from Dune with Redis caching."""
+    if symbol != "BTC":
+        logging.warning("Only BTC metrics supported currently")
+        return {k: 0 for k in METRIC_KEYS}
 
-        client = DuneClient(DUNE_API_KEY)
-        # Execute query and fetch latest result
-        client.execute_query(DUNE_QUERY_ID)
-        data = client.get_query_results(DUNE_QUERY_ID)
-        
-        # Assume data structure: extract latest STH RPL
-        if data and 'rows' in data and data['rows']:
-            rpl = float(data['rows'][0].get('realized_price_sth', 0.0))
-            logging.info(f"Fetched STH RPL for {symbol}: {rpl:.2f}")
-            return rpl
+    metrics = {}
+    missing = []
+    for key in METRIC_KEYS:
+        try:
+            cached = redis_client.get(key)
+            if cached is not None:
+                if key == "gas_history":
+                    metrics[key] = json.loads(cached)
+                elif key in ("whale_transfers", "gas_fee"):
+                    metrics[key] = int(cached)
+                else:
+                    metrics[key] = float(cached)
+            else:
+                missing.append(key)
+        except Exception as e:  # pragma: no cover - Redis failures rare in tests
+            logging.error(f"Redis fetch failed for {key}: {e}")
+            missing.append(key)
+
+    if missing:
+        try:
+            client = DuneClient(DUNE_API_KEY)
+            client.execute_query(DUNE_QUERY_ID)
+            data = client.get_query_results(DUNE_QUERY_ID)
+        except Exception as e:
+            logging.error(f"Dune API fetch failed: {e}")
+            data = None
+
+        if data and "rows" in data and data["rows"]:
+            row = data["rows"][0]
+            for key in missing:
+                value = row.get(key)
+                if key == "gas_history":
+                    value = value or []
+                    try:
+                        redis_client.setex(key, 600, json.dumps(value))
+                    except Exception as e:  # pragma: no cover
+                        logging.error(f"Redis cache failed for {key}: {e}")
+                    metrics[key] = value
+                else:
+                    value = value or 0
+                    if key in ("whale_transfers", "gas_fee"):
+                        value = int(value)
+                    else:
+                        value = float(value)
+                    try:
+                        redis_client.setex(key, 600, value)
+                    except Exception as e:  # pragma: no cover
+                        logging.error(f"Redis cache failed for {key}: {e}")
+                    metrics[key] = value
         else:
-            logging.warning(f"No STH RPL data returned for {symbol}")
-            return 0.0
-    except Exception as e:
-        logging.error(f"Dune API fetch failed for {symbol}: {e}")
-        return 0.0
+            logging.warning("No data returned from Dune")
+            for key in missing:
+                metrics.setdefault(key, [] if key == "gas_history" else 0)
+
+    return metrics
+
+def fetch_sth_rpl(symbol: str = "BTC") -> float:
+    """Return the latest STH RPL value using :func:`fetch_dune_metrics`."""
+    metrics = fetch_dune_metrics(symbol)
+    return float(metrics.get("sth_rpl", 0.0))

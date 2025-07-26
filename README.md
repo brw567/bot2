@@ -27,6 +27,16 @@ The Ultimate Crypto Scalping Bot is an advanced trading tool designed for high-f
 - **UI/Control Layer**: Streamlit GUI, Telegram bots.
 - **Persistence**: SQLite (params/trades), HDF5 (historical), Redis (pub/sub and message cache).
 
+### On-Chain Metrics from Dune
+Metric Name | Type | Description and Use
+----------- | ---- | ------------------------------------------------------------
+volume | float | Trading volume for spike check ( >2.0 for breakout pattern in `detect_pattern`).
+whale_transfers | int | Large transfers count for reversal detection ( >1000000 for 'reversal' pattern).
+gas_fee | int | Current gas fee in gwei for arb cost ( <50 for buy in `generate_signal`).
+price_diff | float | DEX vs CEX price difference for arb opportunity ( >0.001 and positive sentiment for 'buy').
+mempool_density | float | Pending tx density for sandwich risk ( >0.8 for 'hold' in `is_sandwich_risk`).
+gas_history | list | Gas fee history for volatility std ( <0.1 for safe arb in `detect_pattern`).
+
 ### Low-Level Architecture (LLA)
 - Utils: binance/ccxt/grok/ml/onchain/telegram_utils.py.
 - Strategies: base/arbitrage/grid/mev_strategy.py.
