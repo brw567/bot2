@@ -5,13 +5,27 @@ from logging.handlers import RotatingFileHandler
 import streamlit as st
 from pydantic import BaseModel, ValidationError
 from utils.telegram_utils import fetch_channel_messages
-from config import GROK_API_KEY, GROK_TIMEOUT
+from config import (
+    GROK_API_KEY,
+    GROK_TIMEOUT,
+    GROK_PAIRS_INTERVAL,
+    GROK_SENTIMENT_INTERVAL,
+    VOL_THRESHOLD,
+)
+import time
 
 handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
 logging.basicConfig(level=logging.INFO, handlers=[handler],
                     format='%(asctime)s - %(message)s')
 
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"  # Grok API endpoint (per xAI docs, July 2025)
+
+# Cache tracking for Grok calls
+_last_pairs_call = 0.0
+_cached_pairs: list[str] = []
+
+_last_sentiment_call = 0.0
+_cached_sentiment = None
 
 class SentimentResponse(BaseModel):
     """
@@ -241,3 +255,27 @@ def get_recommended_pairs(count: int) -> list[str]:
     except Exception as e:
         logging.error(f"Recommended pairs fetch failed: {e}")
     return []
+
+
+def get_grok_pair_recs(count: int, vol: float = 0.0) -> list[str]:
+    """Return cached recommended pairs unless interval has elapsed."""
+    global _last_pairs_call, _cached_pairs
+    interval = GROK_PAIRS_INTERVAL / 2 if vol > VOL_THRESHOLD else GROK_PAIRS_INTERVAL
+    now = time.time()
+    if now - _last_pairs_call < interval and _cached_pairs:
+        return _cached_pairs
+    _cached_pairs = get_recommended_pairs(count)
+    _last_pairs_call = now
+    return _cached_pairs
+
+
+async def get_grok_insights(symbol: str, vol: float = 0.0):
+    """Return cached sentiment analysis for a symbol."""
+    global _last_sentiment_call, _cached_sentiment
+    interval = GROK_SENTIMENT_INTERVAL / 2 if vol > VOL_THRESHOLD else GROK_SENTIMENT_INTERVAL
+    now = time.time()
+    if now - _last_sentiment_call < interval and _cached_sentiment is not None:
+        return _cached_sentiment
+    _cached_sentiment = await get_sentiment_analysis(symbol)
+    _last_sentiment_call = now
+    return _cached_sentiment
