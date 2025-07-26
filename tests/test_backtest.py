@@ -7,7 +7,7 @@ import pandas as pd
 # Stub external libraries used by backtest module
 ccxt_stub = types.ModuleType('ccxt')
 class DummyBinance:
-    def fetch_ohlcv(self, pair, timeframe='1d', limit=10):
+    def fetch_ohlcv(self, pair, timeframe='1d', since=None, limit=10):
         return [[i,1,1,1,1+i,1] for i in range(limit)]
 ccxt_stub.binance = lambda *a, **k: DummyBinance()
 sys.modules['ccxt'] = ccxt_stub
@@ -131,6 +131,8 @@ def test_switching_backtest():
     ml.lstm_predict = lambda df: {'confidence':0.8}
     sys.modules['utils.ml_utils'] = ml
     importlib.reload(backtest)
+    backtest.ccxt = ccxt_stub
+    backtest.ccxt.binance = lambda *a, **k: DummyBinance()
     res = backtest.switching_backtest(['BTC/USDT'])
     assert {'sharpe', 'winrate', 'max_dd'} <= set(res)
     assert res['winrate'] > 60
