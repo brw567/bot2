@@ -1,12 +1,15 @@
 import requests
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import streamlit as st
 from pydantic import BaseModel, ValidationError
 from utils.telegram_utils import fetch_channel_messages
 from config import GROK_API_KEY, GROK_TIMEOUT
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
+logging.basicConfig(level=logging.INFO, handlers=[handler],
+                    format='%(asctime)s - %(message)s')
 
 GROK_API_URL = "https://api.x.ai/v1/chat/completions"  # Grok API endpoint (per xAI docs, July 2025)
 

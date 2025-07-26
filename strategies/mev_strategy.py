@@ -1,4 +1,5 @@
 import logging
+from logging.handlers import RotatingFileHandler
 import asyncio
 import time
 from strategies.base_strategy import BaseStrategy
@@ -8,7 +9,9 @@ from config import DB_PATH
 import sqlite3
 import pandas as pd
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
+logging.basicConfig(level=logging.INFO, handlers=[handler],
+                    format='%(asctime)s - %(message)s')
 
 class MEVStrategy(BaseStrategy):
     """

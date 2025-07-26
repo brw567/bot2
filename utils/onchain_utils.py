@@ -1,8 +1,11 @@
 import logging
+from logging.handlers import RotatingFileHandler
 from dune_client.client import DuneClient
 from config import DUNE_API_KEY, DUNE_QUERY_ID
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
+logging.basicConfig(level=logging.INFO, handlers=[handler],
+                    format='%(asctime)s - %(message)s')
 
 def fetch_sth_rpl(symbol='BTC'):
     """

@@ -1,11 +1,14 @@
 import logging
+from logging.handlers import RotatingFileHandler
 import pandas as pd
 import sqlite3
 from config import DB_PATH
 from strategies.base_strategy import BaseStrategy
 from utils.binance_utils import get_binance_client, execute_trade
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
+logging.basicConfig(level=logging.INFO, handlers=[handler],
+                    format='%(asctime)s - %(message)s')
 
 class GridStrategy(BaseStrategy):
     """

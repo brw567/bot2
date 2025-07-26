@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import time
 from typing import Iterable
 
@@ -29,7 +30,9 @@ from config import (
 )
 from utils.binance_utils import execute_trade
 
-logging.basicConfig(level=logging.INFO, filename="bot.log", filemode="a", format="%(asctime)s - %(message)s")
+handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
+logging.basicConfig(level=logging.INFO, handlers=[handler],
+                    format='%(asctime)s - %(message)s')
 
 # Global set of monitored pairs that other modules can extend
 pairs: set[str] = set()

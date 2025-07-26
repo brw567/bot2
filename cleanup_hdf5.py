@@ -2,9 +2,12 @@ import os
 import time
 import h5py
 import logging
+from logging.handlers import RotatingFileHandler
 from config import HDF5_DIR
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
+logging.basicConfig(level=logging.INFO, handlers=[handler],
+                    format='%(asctime)s - %(message)s')
 
 def cleanup():
     """
