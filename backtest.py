@@ -6,10 +6,13 @@ import backtrader as bt
 from sklearn.cluster import KMeans
 from arch import arch_model
 import logging
+from logging.handlers import RotatingFileHandler
 from config import BINANCE_API_KEY, BINANCE_API_SECRET
 from utils.ml_utils import fetch_historical_data, train_model, predict_next_price
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
+logging.basicConfig(level=logging.INFO, handlers=[handler],
+                    format='%(asctime)s - %(message)s')
 
 def simple_backtest(symbol='BTC/USDT', timeframe='1d', limit=365, fees=0.001, slippage=0.0005):
     """

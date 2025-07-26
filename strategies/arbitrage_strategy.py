@@ -1,4 +1,5 @@
 import logging
+from logging.handlers import RotatingFileHandler
 import sqlite3
 import pandas as pd
 from config import DB_PATH
@@ -7,7 +8,9 @@ from utils.ccxt_utils import calculate_spread  # No circular: dynamic imports in
 from utils.grok_utils import get_risk_assessment
 from utils.binance_utils import get_binance_client
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
+logging.basicConfig(level=logging.INFO, handlers=[handler],
+                    format='%(asctime)s - %(message)s')
 
 class ArbitrageStrategy(BaseStrategy):
     """

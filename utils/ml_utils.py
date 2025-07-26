@@ -5,9 +5,12 @@ import talib
 import ccxt
 import time
 import logging
+from logging.handlers import RotatingFileHandler
 from config import BINANCE_API_KEY, BINANCE_API_SECRET
 
-logging.basicConfig(level=logging.INFO, filename='bot.log', filemode='a', format='%(asctime)s - %(message)s')
+handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
+logging.basicConfig(level=logging.INFO, handlers=[handler],
+                    format='%(asctime)s - %(message)s')
 
 # Globals to store training statistics for consistent prediction
 TRAIN_MEAN = None
