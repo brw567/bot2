@@ -312,4 +312,7 @@ def switching_backtest(pairs, limit=180):
     winrate = float((s > 0).mean())
     curve = s.cumsum()
     max_dd = float((curve.cummax() - curve).max())
+    assert (
+        winrate > 0.60 and sharpe > 1.5 and max_dd < 0.05
+    ), "Backtest KPIs not met"
     return {'sharpe': sharpe, 'winrate': winrate, 'max_dd': max_dd}

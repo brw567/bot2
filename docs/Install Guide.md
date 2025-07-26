@@ -137,6 +137,8 @@ cp .env.example .env
 vim .env  # Fill API keys (Binance, Telegram, Grok, Dune, Redis)
 chmod 600 .env
 ```
+All API keys are validated at startup. Ensure `BINANCE_API_KEY`, `BINANCE_API_SECRET`,
+`GROK_API_KEY` and `TELEGRAM_TOKEN` are present to avoid initialization errors.
 
 Run install script to initialize DB and Telethon session:
 ```

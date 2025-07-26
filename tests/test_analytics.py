@@ -2,15 +2,24 @@ import sys
 import types
 import importlib
 import asyncio
+import os
 
 
 def test_analyze_once():
     originals = {k: sys.modules.get(k) for k in ['utils.binance_utils','utils.ml_utils','utils.onchain_utils','redis','ta','dotenv']}
+    os.environ.setdefault('BINANCE_API_KEY','x')
+    os.environ.setdefault('BINANCE_API_SECRET','x')
+    os.environ.setdefault('GROK_API_KEY','x')
+    os.environ.setdefault('TELEGRAM_TOKEN','x')
     try:
         binance_stub = types.ModuleType('utils.binance_utils')
         class DummyClient:
             def fetch_ohlcv(self, pair, tf, limit=100):
                 return [[i,1,1,1,1+i,1] for i in range(limit)]
+            def fetch_ticker(self, pair):
+                return {'last':1,'high':1,'low':1}
+            def fetch_ticker(self, pair):
+                return {'last':1,'high':1,'low':1}
         binance_stub.get_binance_client = lambda: DummyClient()
         sys.modules['utils.binance_utils'] = binance_stub
 
@@ -58,6 +67,10 @@ def test_analyze_once():
 
 def test_fallback_and_notify():
     originals = {k: sys.modules.get(k) for k in ['utils.binance_utils','utils.ml_utils','utils.onchain_utils','redis','ta','dotenv','utils.grok_utils','utils.telegram_utils']}
+    os.environ.setdefault('BINANCE_API_KEY','x')
+    os.environ.setdefault('BINANCE_API_SECRET','x')
+    os.environ.setdefault('GROK_API_KEY','x')
+    os.environ.setdefault('TELEGRAM_TOKEN','x')
     try:
         binance_stub = types.ModuleType('utils.binance_utils')
         class DummyClient:
@@ -112,6 +125,116 @@ def test_fallback_and_notify():
         m = engine.metrics['BTC/USDT']
         assert m['data_source'] == 'grok'
         assert calls and 'Switch to' in calls[0]
+    finally:
+        for k, v in originals.items():
+            if v is not None:
+                sys.modules[k] = v
+            else:
+                sys.modules.pop(k, None)
+
+
+def test_e2e_cycle():
+    originals = {k: sys.modules.get(k) for k in [
+        'utils.binance_utils','utils.ml_utils','utils.onchain_utils',
+        'utils.ccxt_utils','utils.grok_utils','redis','ta','dotenv',
+        'utils.telegram_utils','sqlite3'
+    ]}
+    os.environ.setdefault('BINANCE_API_KEY','x')
+    os.environ.setdefault('BINANCE_API_SECRET','x')
+    os.environ.setdefault('GROK_API_KEY','x')
+    os.environ.setdefault('TELEGRAM_TOKEN','x')
+    try:
+        binance_stub = types.ModuleType('utils.binance_utils')
+        class DummyClient:
+            def fetch_ohlcv(self, pair, tf, limit=100):
+                return [[i,1,1,1,1+i,1] for i in range(limit)]
+            def fetch_ticker(self, pair):
+                return {"last":1,"high":1,"low":1}
+        executed = []
+        binance_stub.get_binance_client = lambda: DummyClient()
+        def execute_trade(symbol, side, amount, price=None):
+            executed.append((symbol, side))
+        binance_stub.execute_trade = execute_trade
+        sys.modules['utils.binance_utils'] = binance_stub
+
+        ml_stub = types.ModuleType('utils.ml_utils')
+        ml_stub.lstm_predict = lambda df: {'confidence': 0.8}
+        sys.modules['utils.ml_utils'] = ml_stub
+
+        onchain_stub = types.ModuleType('utils.onchain_utils')
+        onchain_stub.get_oi_funding = lambda pair: ({'change': 0}, 0)
+        sys.modules['utils.onchain_utils'] = onchain_stub
+
+        ccxt_utils_stub = types.ModuleType('utils.ccxt_utils')
+        ccxt_utils_stub.calculate_spread = lambda a,b: 0.01
+        sys.modules['utils.ccxt_utils'] = ccxt_utils_stub
+
+        class RiskResponse:
+            def __init__(self, trade='yes', sl_mult=1.0, tp_mult=1.0, details='ok'):
+                self.trade = trade
+                self.sl_mult = sl_mult
+                self.tp_mult = tp_mult
+                self.details = details
+        grok_stub = types.ModuleType('utils.grok_utils')
+        grok_stub.get_risk_assessment = lambda *a, **k: RiskResponse()
+        sys.modules['utils.grok_utils'] = grok_stub
+
+        redis_stub = types.ModuleType('redis')
+        class DummyRedis:
+            def __init__(self,*a,**k):
+                pass
+            def set(self,*a,**k):
+                pass
+        redis_stub.Redis = DummyRedis
+        sys.modules['redis'] = redis_stub
+
+        ta_stub = types.ModuleType('ta')
+        ta_stub.add_all_ta_features = lambda df, **k: df.assign(momentum_rsi=40, trend_macd_diff=-1, volatility_atr=1.0)
+        sys.modules['ta'] = ta_stub
+
+        dotenv_stub = types.ModuleType('dotenv')
+        dotenv_stub.load_dotenv = lambda *a, **k: None
+        sys.modules['dotenv'] = dotenv_stub
+        import config as cfg
+        importlib.reload(cfg)
+
+        tele_stub = types.ModuleType('utils.telegram_utils')
+        async def send_notification(msg):
+            pass
+        async def send_alert(msg):
+            pass
+        tele_stub.send_notification = send_notification
+        tele_stub.send_alert = send_alert
+        sys.modules['utils.telegram_utils'] = tele_stub
+
+        sqlite_stub = types.ModuleType('sqlite3')
+        class DummyConn:
+            def cursor(self):
+                return self
+            def execute(self,*a,**k):
+                return self
+            def commit(self):
+                pass
+            def close(self):
+                pass
+        sqlite_stub.connect = lambda *a, **k: DummyConn()
+        sys.modules['sqlite3'] = sqlite_stub
+
+        ae = importlib.import_module('core.analytics_engine')
+        importlib.reload(ae)
+        import strategies.arbitrage_strategy as arb_mod
+        importlib.reload(arb_mod)
+        engine = ae.AnalyticsEngine(['BTC/USDT'])
+        asyncio.run(engine.analyze_once())
+        from strategies.arbitrage_strategy import ArbitrageStrategy
+        def dummy_run(self, s1, s2):
+            execute_trade(s1, 'buy', 1)
+            execute_trade(s2, 'sell', 1)
+        ArbitrageStrategy.run = dummy_run
+        arb = ArbitrageStrategy()
+        arb.run('BTC/USDT','BTC/USDT')
+        assert engine.metrics['BTC/USDT']['strategy'] == 'arbitrage'
+        assert executed
     finally:
         for k, v in originals.items():
             if v is not None:

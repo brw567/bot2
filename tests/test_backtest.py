@@ -64,8 +64,11 @@ sys.modules['torch'] = types.ModuleType('torch')
 # Environment variables for config
 os.environ.setdefault('BINANCE_API_KEY', 'x')
 os.environ.setdefault('BINANCE_API_SECRET', 'y')
-
+os.environ.setdefault('GROK_API_KEY', 'x')
+os.environ.setdefault('TELEGRAM_TOKEN', 'x')
 import importlib
+import config as cfg
+importlib.reload(cfg)
 import backtest
 importlib.reload(backtest)
 
@@ -77,5 +80,22 @@ def test_multi_backtest_returns_metrics():
 
 
 def test_switching_backtest():
-    res = backtest.switching_backtest(['BTC/USDT'])
+    class DummyAE:
+        def __init__(self, pairs, timeframe='1m'):
+            self.pairs = pairs
+            self.metrics = {}
+        async def analyze_once(self):
+            self.metrics = {
+                self.pairs[0]: {'pattern': 'trending'},
+                self.pairs[1]: {'pattern': 'sideways'},
+            }
+    ae_mod = types.ModuleType('core.analytics_engine')
+    ae_mod.AnalyticsEngine = DummyAE
+    orig = sys.modules.get('core.analytics_engine')
+    sys.modules['core.analytics_engine'] = ae_mod
+    try:
+        res = backtest.switching_backtest(['BTC/USDT','ETH/USDT'])
+    finally:
+        if orig is not None:
+            sys.modules['core.analytics_engine'] = orig
     assert {'sharpe', 'winrate', 'max_dd'} <= set(res)

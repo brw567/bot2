@@ -80,6 +80,10 @@ async def send_notification(message):
         if client:
             await client.disconnect()
 
+async def send_alert(message: str) -> None:
+    """Send a critical alert via Telegram."""
+    await send_notification(message)
+
 async def fetch_channel_messages(channel, limit=100):
     """
     Fetch recent messages from a Telegram channel for sentiment analysis.

@@ -14,6 +14,9 @@ The Ultimate Crypto Scalping Bot is an advanced trading tool designed for high-f
 - Grok recommends additional pairs, monitoring 5x the configured amount for analytics.
 - Market volatility indicator with automatic pair swapping based on configurable thresholds.
 - Async AnalyticsEngine monitors multiple pairs and suggests strategy switches.
+- Sharpe ratio computed per pair with live display on the dashboard.
+- Startup now validates all API keys to prevent runtime failures.
+- E2E tests assert backtest KPIs (>60% winrate, Sharpe>1.5, <5% DD).
 - Per-pair settings with DB persistence and AgGrid editing.
 - Interactive charts and sidebar controls remain visible on all pages.
 - Unit tests via `pytest` ensure core logic like volatility scaling works.

@@ -39,9 +39,18 @@ class AnalyticsEngine:
             self.redis = redis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT, db=config.REDIS_DB)
         except Exception:
             self.redis = None
-        missing = [k for k in ['BINANCE_API_KEY', 'BINANCE_API_SECRET', 'GROK_API_KEY'] if not getattr(config, k, None)]
+        missing = [
+            k
+            for k in [
+                'BINANCE_API_KEY',
+                'BINANCE_API_SECRET',
+                'GROK_API_KEY',
+                'TELEGRAM_TOKEN',
+            ]
+            if not getattr(config, k, None)
+        ]
         if missing:
-            logging.warning("Missing API keys: %s", ', '.join(missing))
+            raise ValueError(f"Missing API keys: {', '.join(missing)}")
 
     async def fetch_data(self, pair: str, limit: int = 100) -> pd.DataFrame:
         """Return OHLCV dataframe for the pair with Grok fallback."""
@@ -117,5 +126,13 @@ class AnalyticsEngine:
     async def continuous_analyze(self, interval: int = 60):
         """Run continuous analysis loop."""
         while True:
-            await self.analyze_once()
+            try:
+                await self.analyze_once()
+            except Exception as e:  # pragma: no cover - unexpected runtime err
+                logging.error(f"Analysis failed: {e}")
+                try:
+                    from utils.telegram_utils import send_alert  # dynamic import
+                    await send_alert(f"Critical error on analysis: {e}")
+                except Exception as alert_e:
+                    logging.error(f"Alert failed: {alert_e}")
             await asyncio.sleep(interval)
