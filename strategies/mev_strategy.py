@@ -35,6 +35,40 @@ class MEVStrategy(BaseStrategy):
         self.imbalance_threshold = imbalance_threshold
         self.delta_threshold = delta_threshold
 
+    def is_arbitrage_opportunity(self, price_diff: float, sentiment: str) -> bool:
+        """Return True if price diff and sentiment indicate an arbitrage buy."""
+        return price_diff > 0.001 and sentiment == "positive"
+
+    def is_sandwich_risk(self, mempool_density: float) -> bool:
+        """Return True if mempool density suggests sandwich risk."""
+        return mempool_density > 0.8
+
+    def detect_pattern(self, volume: float, gas_vol: float, profit: float) -> str:
+        """Identify breakout/reversal pattern using on-chain metrics."""
+        if volume > 2.0 and gas_vol < 0.1 and profit > 0:
+            return "breakout"
+        if volume > 2.0 and gas_vol < 0.1 and profit <= 0:
+            return "reversal"
+        return "none"
+
+    def generate_signal(
+        self,
+        price_diff: float,
+        gas_fee: int,
+        sentiment: str,
+        mempool_density: float,
+        gas_vol: float,
+        volume: float,
+        profit: float,
+    ) -> str:
+        """Generate trading signal based on on-chain metrics."""
+        pattern = self.detect_pattern(volume, gas_vol, profit)
+        if self.is_sandwich_risk(mempool_density):
+            return "hold"
+        if self.is_arbitrage_opportunity(price_diff, sentiment) and gas_fee < 50 and pattern in ("breakout", "trend"):
+            return "buy"
+        return "hold"
+
     def detect_mev(self, symbol):
         """
         Detect potential MEV (e.g., sandwich attacks) by analyzing order book snapshots.

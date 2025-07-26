@@ -37,6 +37,10 @@ price_diff | float | DEX vs CEX price difference for arb opportunity ( >0.001 an
 mempool_density | float | Pending tx density for sandwich risk ( >0.8 for 'hold' in `is_sandwich_risk`).
 gas_history | list | Gas fee history for volatility std ( <0.1 for safe arb in `detect_pattern`).
 
+The bot queries these metrics via a single Dune API call. The query accepts a
+`symbol` parameter and supports BTC, ETH, and SOL to fetch data for the
+corresponding chains (Bitcoin, Ethereum, Solana).
+
 ### Low-Level Architecture (LLA)
 - Utils: binance/ccxt/grok/ml/onchain/telegram_utils.py.
 - Strategies: base/arbitrage/grid/mev_strategy.py.
