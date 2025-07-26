@@ -14,6 +14,50 @@ handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
 logging.basicConfig(level=logging.INFO, handlers=[handler],
                     format='%(asctime)s - %(message)s')
 
+
+def multi_backtest(pairs, timeframe='1d', limit=365):
+    """Backtest multiple pairs and aggregate performance metrics."""
+    try:
+        client = ccxt.binance({'apiKey': BINANCE_API_KEY, 'secret': BINANCE_API_SECRET})
+        returns_list = []
+        for sym in pairs:
+            ohlcv = client.fetch_ohlcv(sym, timeframe, limit=limit)
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['ema12'] = talib.EMA(df['close'], timeperiod=12)
+            df['ema26'] = talib.EMA(df['close'], timeperiod=26)
+            df['rsi'] = talib.RSI(df['close'], timeperiod=14)
+            entry = (df['ema12'] > df['ema26']) & (df['rsi'] < 70)
+            exit = (df['ema12'] < df['ema26']) & (df['rsi'] > 30)
+            pos = pd.Series(0, index=df.index)
+            pos[entry] = 1
+            pos[exit] = 0
+            pos = pos.ffill().fillna(0)
+            rets = pos.shift(1) * df['close'].pct_change().fillna(0)
+            rets.name = sym
+            returns_list.append(rets)
+
+        all_ret = pd.concat(returns_list, axis=1).fillna(0)
+        portfolio = all_ret.mean(axis=1)
+        if portfolio.std() != 0:
+            sharpe = float((portfolio.mean() / portfolio.std()) * (252 ** 0.5))
+        else:
+            sharpe = 0.0
+        var = float(portfolio.quantile(0.05))
+        cvar = float(portfolio[portfolio <= var].mean())
+        curve = (portfolio + 1).cumprod()
+        max_dd = float((curve.cummax() - curve).max())
+        winrate = float((portfolio > 0).mean())
+        return {
+            'sharpe': sharpe,
+            'var': var,
+            'cvar': cvar,
+            'max_dd': max_dd,
+            'winrate': winrate,
+        }
+    except Exception as e:  # pragma: no cover - logging
+        logging.error(f"Multi backtest failed: {e}")
+        return {}
+
 def simple_backtest(symbol='BTC/USDT', timeframe='1d', limit=365, fees=0.001, slippage=0.0005):
     """
     Run a simple backtest using EMA and RSI signals with vectorbt for vectorized performance.
