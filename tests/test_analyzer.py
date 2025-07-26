@@ -39,6 +39,9 @@ sympy_stub.symbols = lambda x: (x+'a', x+'b') if x == 'a b' else None
 sympy_stub.Eq = lambda l,r: (l,r)
 sympy_stub.solve = lambda eqns, vars: {vars[0]:1, vars[1]:0}
 sys.modules['sympy'] = sympy_stub
+dotenv_stub = types.ModuleType('dotenv')
+dotenv_stub.load_dotenv = lambda *a, **k: None
+sys.modules['dotenv'] = dotenv_stub
 
 os.environ.setdefault('TELEGRAM_API_ID', '1')
 os.environ.setdefault('TELEGRAM_API_HASH', 'x')
