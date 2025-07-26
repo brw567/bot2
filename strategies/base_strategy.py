@@ -1,6 +1,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
 from utils.grok_utils import get_risk_assessment
+from config import MAX_DEAL_PERCENT, MAX_DEAL_ABSOLUTE
 
 handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
 logging.basicConfig(level=logging.INFO, handlers=[handler],
@@ -35,6 +36,26 @@ class BaseStrategy:
             logging.error(f"Volatility scaling failed: {e}")
             return size
 
+    def cap_position_size(self, size, price):
+        """Cap position size using MAX_DEAL_PERCENT and MAX_DEAL_ABSOLUTE."""
+        try:
+            if size <= 0 or price <= 0:
+                return 0.0
+
+            cap = min(
+                self.capital * MAX_DEAL_PERCENT / price,
+                MAX_DEAL_ABSOLUTE / price,
+            )
+            final_size = min(size, cap)
+            if final_size < size:
+                logging.info(
+                    f"Position size capped from {size:.6f} ({size * price:.2f} USDT) to {final_size:.6f}"
+                )
+            return final_size
+        except Exception as e:
+            logging.error(f"cap_position_size failed: {e}")
+            return 0.0
+
     def calculate_position_size(self, price, sl_distance, winrate=0.6, vol=0.0):
         """
         Calculate position size using Kelly criterion approximation.
@@ -47,7 +68,8 @@ class BaseStrategy:
         Returns:
             float: Position size (in units of asset).
 
-        Note: Uses simplified R_ratio=1 for scalping; caps at 20% exposure.
+        Note: Uses simplified R_ratio=1 for scalping; capped by
+        MAX_DEAL_PERCENT and MAX_DEAL_ABSOLUTE from config.
         """
         try:
             if sl_distance <= 0 or price <= 0:
@@ -58,8 +80,8 @@ class BaseStrategy:
             risk_amount = self.capital * self.risk_per_trade * kelly
             size = risk_amount / (price * sl_distance)
             size = self.scale_by_volatility(size, vol)
-            max_size = self.capital / price * 0.2  # Max 20% exposure per Trader
-            final_size = min(size, max_size)
+
+            final_size = self.cap_position_size(size, price)
             if final_size <= 0:
                 logging.warning(f"Calculated position size non-positive: {final_size}")
                 return 0.0

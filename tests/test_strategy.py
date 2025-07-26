@@ -10,6 +10,12 @@ pydantic_stub.BaseModel = BaseModel
 pydantic_stub.ValidationError = ValidationError
 sys.modules['pydantic'] = pydantic_stub
 sys.modules.setdefault('requests', types.ModuleType('requests'))
+redis_stub = types.ModuleType('redis')
+class DummyRedis:
+    def __init__(self, *a, **kw):
+        pass
+redis_stub.Redis = DummyRedis
+sys.modules.setdefault('redis', redis_stub)
 telethon_stub = types.ModuleType('telethon')
 telethon_sessions_stub = types.ModuleType('telethon.sessions')
 telethon_stub.TelegramClient = object
@@ -32,3 +38,9 @@ def test_volatility_scaling():
     size_low = strat.calculate_position_size(price=100, sl_distance=0.01, vol=0.01)
     size_high = strat.calculate_position_size(price=100, sl_distance=0.01, vol=0.05)
     assert size_high < size_low
+
+
+def test_position_size_cap():
+    strat = BaseStrategy(capital=10000, risk_per_trade=1.0)
+    size = strat.calculate_position_size(price=100, sl_distance=0.01, vol=0.0)
+    assert size == 20.0

@@ -60,3 +60,11 @@ DEFAULT_PARAMS = {
 ANALYTICS_INTERVAL = int(get_param('ANALYTICS_INTERVAL', os.getenv('ANALYTICS_INTERVAL', 300)))  # seconds
 VOL_THRESHOLD = float(get_param('VOL_THRESHOLD', os.getenv('VOL_THRESHOLD', 0.05)))
 GARCH_FLAG = (get_param('GARCH_FLAG', os.getenv('GARCH_FLAG', 'False')).lower() == 'true')
+
+# Position sizing limits
+MAX_DEAL_PERCENT = float(
+    get_param('MAX_DEAL_PERCENT', os.getenv('MAX_DEAL_PERCENT', 0.2))
+)
+MAX_DEAL_ABSOLUTE = float(
+    get_param('MAX_DEAL_ABSOLUTE', os.getenv('MAX_DEAL_ABSOLUTE', 10000))
+)
