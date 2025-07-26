@@ -70,3 +70,9 @@ def test_compute_vol():
     vol = ca.compute_vol([10, 10, 10])
     assert vol == 0.0
 
+
+def test_is_market_volatile():
+    ca = ContinuousAnalyzer(None, ["BTC/USDT"])
+    ca.prev_metrics["BTC/USDT"] = {"volatility": 0.1}
+    assert ca.is_market_volatile()
+

@@ -159,6 +159,11 @@ async def monitoring_loop():
     last_reset = time.time()
     request_weights = {'fetch_ticker': 1, 'fetch_ohlcv': 2, 'create_order': 1}  # Approx weights
     prev_rpl = fetch_sth_rpl('BTC')
+
+    active_pairs = st.session_state.get('active_pairs', [])
+    swap_pairs = st.session_state.get('swap_pairs', [])
+    cooldown_until = st.session_state.get('cooldown_until', {})
+    pair_scores = st.session_state.get('pair_scores', {})
     
     while True:
         try:
@@ -179,9 +184,23 @@ async def monitoring_loop():
 
             client = get_binance_client()
             pair_limit = int(get_param('auto_pair_limit', 10))
-            trading_pairs = ['BTC/USDT', 'ETH/USDT'][:pair_limit]
-            monitor_pairs = []
-            pairs = trading_pairs + [p for p in monitor_pairs if p not in trading_pairs]
+            multiplier = int(get_param('swap_pair_multiplier', 10))
+            all_recs = get_grok_pair_recs(pair_limit * (1 + multiplier))
+            if not active_pairs:
+                active_pairs = all_recs[:pair_limit]
+                swap_pairs = all_recs[pair_limit:]
+            else:
+                for p in all_recs:
+                    if p not in active_pairs and p not in swap_pairs:
+                        swap_pairs.append(p)
+            # remove cooldowned pairs from active list
+            now = time.time()
+            for p in list(cooldown_until):
+                if now >= cooldown_until[p]:
+                    cooldown_until.pop(p)
+            active_pairs = [p for p in active_pairs if p not in cooldown_until]
+            pairs = active_pairs + [p for p in swap_pairs if p not in active_pairs]
+            trading_pairs = list(active_pairs)
             fallback_info = {}
             symbols = [p.split('/')[0] for p in pairs]
 
@@ -261,6 +280,7 @@ async def monitoring_loop():
                     current_rpl,
                     recent_data=candles[['close', 'volume', 'rsi']].values,
                 )
+                pair_scores[pair] = score
 
                 if fallback_used:
                     logging.info(f"[fallback] Used backup data for {pair}")
@@ -277,6 +297,20 @@ async def monitoring_loop():
                 if not fallback_used:
                     save_cached_indicators(pair, price, vol, candles, risk, sentiment)
 
+            if swap_pairs:
+                lowest = min(active_pairs, key=lambda p: pair_scores.get(p, 0)) if active_pairs else None
+                highest = max(swap_pairs, key=lambda p: pair_scores.get(p, 0)) if swap_pairs else None
+                if lowest and highest:
+                    low_score = pair_scores.get(lowest, 0)
+                    high_score = pair_scores.get(highest, 0)
+                    threshold = 1 + float(get_param('volatility_threshold_percent', 50)) / 100
+                    if low_score > 0 and high_score > low_score * threshold:
+                        cooldown_until[lowest] = time.time() + 45 * 60
+                        active_pairs.remove(lowest)
+                        swap_pairs.remove(highest)
+                        swap_pairs.append(lowest)
+                        active_pairs.append(highest)
+
             # Update winrate
             conn = sqlite3.connect(DB_PATH)
             wins = conn.execute("SELECT COUNT(*) FROM trades WHERE profit > 0").fetchone()[0]
@@ -287,6 +321,10 @@ async def monitoring_loop():
             conn.close()
             r.publish('winrate_updates', json.dumps({'winrate': winrate}))
             st.session_state['fallback_pairs'] = fallback_info
+            st.session_state['active_pairs'] = active_pairs
+            st.session_state['swap_pairs'] = swap_pairs
+            st.session_state['cooldown_until'] = cooldown_until
+            st.session_state['pair_scores'] = pair_scores
 
             await asyncio.sleep(5)
         except Exception as e:
@@ -373,6 +411,15 @@ if __name__ == '__main__':
         st.metric('Winrate', f"{winrate:.2%}", help="Current win rate from trades")
         sharpe = 1.5
         st.metric('Sharpe Ratio', f"{sharpe:.2f}", help="Risk-adjusted return")
+        volatile_flag = r.get('market_volatile')
+        vol_val = json.loads(volatile_flag)['volatile'] if volatile_flag else False
+        st.metric('Market Volatile', str(vol_val))
+        st.write('Active pairs:', ', '.join(st.session_state.get('active_pairs', [])))
+        st.write('Swap pairs:', ', '.join(st.session_state.get('swap_pairs', [])))
+        cds = st.session_state.get('cooldown_until', {})
+        if cds:
+            desc = [f"{p}: {int((t-time.time())/60)}m" for p, t in cds.items()]
+            st.write('Cooldown:', ', '.join(desc))
         fb_pairs = st.session_state.get('fallback_pairs', {})
         warn = [p for p, used in fb_pairs.items() if used]
         if warn:

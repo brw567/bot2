@@ -31,4 +31,7 @@ INSERT OR REPLACE INTO settings (key, value) VALUES
     ('slippage_tolerance', '0.001'),
     ('risk_per_trade', '0.01'),
     ('grok_timeout', '10'),
-    ('auto_pair_limit', '10');
+    ('auto_pair_limit', '10'),
+    ('swap_pair_multiplier', '10'),
+    ('volatility_check_interval', '14400'),
+    ('volatility_threshold_percent', '50.0');

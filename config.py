@@ -64,6 +64,9 @@ DEFAULT_PARAMS = {
     'risk_per_trade': 0.01,
     'grok_timeout': GROK_TIMEOUT,
     'auto_pair_limit': 10,  # Number of pairs to auto-trade (monitor 5x for analytics)
+    'swap_pair_multiplier': 10,
+    'volatility_check_interval': 4 * 60 * 60,
+    'volatility_threshold_percent': 50.0,
 }
 
 # Analytics settings for ContinuousAnalyzer
@@ -84,4 +87,15 @@ MAX_DEAL_ABSOLUTE = float(
 # Minimum asset balance (in units) to monitor automatically
 MIN_BALANCE_THRESHOLD = float(
     get_param('MIN_BALANCE_THRESHOLD', os.getenv('MIN_BALANCE_THRESHOLD', 10))
+)
+
+# Dynamic trading pair management
+SWAP_PAIR_MULTIPLIER = int(
+    get_param('SWAP_PAIR_MULTIPLIER', os.getenv('SWAP_PAIR_MULTIPLIER', 10))
+)
+VOLATILITY_CHECK_INTERVAL = int(
+    get_param('VOLATILITY_CHECK_INTERVAL', os.getenv('VOLATILITY_CHECK_INTERVAL', 4 * 60 * 60))
+)
+VOLATILITY_THRESHOLD_PERCENT = float(
+    get_param('VOLATILITY_THRESHOLD_PERCENT', os.getenv('VOLATILITY_THRESHOLD_PERCENT', 50.0))
 )
