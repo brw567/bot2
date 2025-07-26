@@ -31,6 +31,12 @@ def init_db(db_path: str) -> None:
     cursor.execute(
         "INSERT OR IGNORE INTO bot_state (id, state) VALUES (1, 'stopped')"
     )
+    from config import DEFAULT_PARAMS
+    for k, v in DEFAULT_PARAMS.items():
+        cursor.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+            (k, str(v)),
+        )
     conn.commit()
     conn.close()
 

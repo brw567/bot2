@@ -27,6 +27,7 @@ from config import (
     ANALYTICS_INTERVAL,
     VOL_THRESHOLD,
     GARCH_FLAG,
+    VOLATILITY_THRESHOLD_PERCENT,
 )
 from utils.binance_utils import execute_trade, get_balance
 
@@ -126,6 +127,20 @@ class ContinuousAnalyzer:
         except Exception:
             return 0.0
 
+    def is_market_volatile(self) -> bool:
+        """Return True if current metrics or cached data indicate high volatility."""
+        try:
+            for data in self.prev_metrics.values():
+                if data.get("volatility", 0) > VOL_THRESHOLD:
+                    return True
+            if self.redis:
+                cached = self.redis.get("BTC:gas_fee")
+                if cached and float(cached) > 50:
+                    return True
+        except Exception as e:
+            logging.error(f"Volatility check failed: {e}")
+        return False
+
     def compute_success(self, sharpe: float, win_rate: float, slippage: float, vol: float, pattern: str | None = None) -> float:
         """Return weighted success score based on performance metrics and pattern."""
         score = 0.5 * sharpe + 0.4 * win_rate - 0.05 * slippage - 0.05 * vol
@@ -182,8 +197,11 @@ class ContinuousAnalyzer:
                         asyncio.create_task(self.monitor_exit(pair))
                 except Exception as e:  # pragma: no cover
                     logging.error(f"Analyzer error for {pair}: {e}")
-            sleep_int = ANALYTICS_INTERVAL
-            if metrics.get("volatility", 0) > VOL_THRESHOLD:
-                sleep_int = 30
+            volatile = self.is_market_volatile()
+            if self.redis:
+                msg = json.dumps({"volatile": volatile})
+                self.redis.set("market_volatile", msg)
+                self.redis.publish("market_volatile", msg)
+            sleep_int = 30 if volatile else ANALYTICS_INTERVAL
             await asyncio.sleep(sleep_int)
 

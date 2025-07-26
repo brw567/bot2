@@ -21,6 +21,9 @@
 - Pauses: RPL spikes (>20%), quotas (>80% limit), drawdowns.
 - Fallback prices from Grok shown in yellow if Binance data fails.
 - Grok-recommended pairs (5x limit) monitored for analytics.
+- Market volatility indicator on the Dashboard.
+- Automatic pair swapping when a monitored pair outperforms an active one by the configured threshold.
+- Adjustable settings: `swap_pair_multiplier`, `volatility_check_interval`, `volatility_threshold_percent`.
 
 ## Troubleshooting
 - API errors: Check keys in `.env`.
