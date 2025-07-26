@@ -28,7 +28,7 @@ from config import (
     VOL_THRESHOLD,
     GARCH_FLAG,
 )
-from utils.binance_utils import execute_trade
+from utils.binance_utils import execute_trade, get_balance
 
 handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
 logging.basicConfig(level=logging.INFO, handlers=[handler],
@@ -46,6 +46,10 @@ class ContinuousAnalyzer:
         self.pairs = set(pairs_iter)
         pairs.update(self.pairs)
         self.prev_metrics: dict[str, dict] = {}
+        try:
+            get_balance()
+        except Exception as e:
+            logging.error(f"Balance check failed: {e}")
 
     async def fetch_data(self, pair: str) -> pd.DataFrame:
         """Fetch recent OHLCV data for a pair using ccxt."""
@@ -146,6 +150,10 @@ class ContinuousAnalyzer:
     async def run(self):
         """Main loop fetching data and publishing metrics."""
         while True:
+            try:
+                get_balance()
+            except Exception as e:
+                logging.error(f"Balance check failed: {e}")
             for pair in list(self.pairs):
                 try:
                     df = await self.fetch_data(pair)

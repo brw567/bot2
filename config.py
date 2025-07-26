@@ -68,3 +68,8 @@ MAX_DEAL_PERCENT = float(
 MAX_DEAL_ABSOLUTE = float(
     get_param('MAX_DEAL_ABSOLUTE', os.getenv('MAX_DEAL_ABSOLUTE', 10000))
 )
+
+# Minimum asset balance (in units) to monitor automatically
+MIN_BALANCE_THRESHOLD = float(
+    get_param('MIN_BALANCE_THRESHOLD', os.getenv('MIN_BALANCE_THRESHOLD', 10))
+)
