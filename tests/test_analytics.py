@@ -2,6 +2,14 @@ import sys
 import types
 import importlib
 import asyncio
+import os
+
+os.environ.setdefault('GROK_API_KEY', 'z')
+os.environ.setdefault('TELEGRAM_TOKEN', 't')
+os.environ.setdefault('TELEGRAM_API_ID', '1')
+os.environ.setdefault('TELEGRAM_API_HASH', 'h')
+os.environ.setdefault('BINANCE_API_KEY', 'x')
+os.environ.setdefault('BINANCE_API_SECRET', 'y')
 
 
 def test_analyze_once():

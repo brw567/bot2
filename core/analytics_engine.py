@@ -39,9 +39,11 @@ class AnalyticsEngine:
             self.redis = redis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT, db=config.REDIS_DB)
         except Exception:
             self.redis = None
-        missing = [k for k in ['BINANCE_API_KEY', 'BINANCE_API_SECRET', 'GROK_API_KEY'] if not getattr(config, k, None)]
+        required = ['BINANCE_API_KEY', 'BINANCE_API_SECRET', 'GROK_API_KEY',
+                    'TELEGRAM_TOKEN', 'TELEGRAM_API_ID', 'TELEGRAM_API_HASH']
+        missing = [k for k in required if not getattr(config, k, None)]
         if missing:
-            logging.warning("Missing API keys: %s", ', '.join(missing))
+            raise ValueError(f"Missing API keys: {', '.join(missing)}")
 
     async def fetch_data(self, pair: str, limit: int = 100) -> pd.DataFrame:
         """Return OHLCV dataframe for the pair with Grok fallback."""
@@ -113,9 +115,22 @@ class AnalyticsEngine:
                         logging.error(f"Redis store failed: {e}")
             except Exception as e:  # pragma: no cover - network issues
                 logging.error(f"Analytics error for {pair}: {e}")
+                try:
+                    from utils.telegram_utils import send_alert
+                    await send_alert(f"Analysis failed for {pair}: {e}")
+                except Exception as err:
+                    logging.error(f"Alert failed: {err}")
 
     async def continuous_analyze(self, interval: int = 60):
         """Run continuous analysis loop."""
         while True:
-            await self.analyze_once()
+            try:
+                await self.analyze_once()
+            except Exception as e:  # pragma: no cover - top level errors
+                logging.error(f"continuous_analyze failed: {e}")
+                try:
+                    from utils.telegram_utils import send_alert
+                    await send_alert(f"Continuous analyze failure: {e}")
+                except Exception as err:
+                    logging.error(f"Alert failed: {err}")
             await asyncio.sleep(interval)

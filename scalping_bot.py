@@ -413,18 +413,21 @@ if __name__ == '__main__':
         st.subheader('Live Metrics', help="Real-time key performance indicators.")
         winrate = st.session_state.get('winrate', 0.65)
         st.metric('Winrate', f"{winrate:.2%}", help="Current win rate from trades")
-        sharpe = 1.5
+        eng_metrics = st.session_state.get('engine').metrics if 'engine' in st.session_state else {}
+        sharpe_vals = [m.get('sharpe', 0) for m in eng_metrics.values()]
+        sharpe = sum(sharpe_vals) / len(sharpe_vals) if sharpe_vals else 0.0
         st.metric('Sharpe Ratio', f"{sharpe:.2f}", help="Risk-adjusted return")
         volatile_flag = r.get('market_volatile')
         vol_val = json.loads(volatile_flag)['volatile'] if volatile_flag else False
         st.metric('Market Volatile', str(vol_val))
-        eng_metrics = st.session_state.get('engine').metrics if 'engine' in st.session_state else {}
         if eng_metrics:
             dfm = pd.DataFrame.from_dict(eng_metrics, orient='index')
             def _hl(row):
                 color = 'yellow' if row.get('data_source') == 'grok' else ''
                 return [f'background-color: {color}'] * len(row)
-            st.dataframe(dfm.style.apply(_hl, axis=1))
+            gbm = GridOptionsBuilder.from_dataframe(dfm)
+            gbm.configure_default_column(editable=False)
+            AgGrid(dfm.style.apply(_hl, axis=1), gridOptions=gbm.build(), height=300)
         st.write('Active pairs:', ', '.join(st.session_state.get('active_pairs', [])))
         st.write('Swap pairs:', ', '.join(st.session_state.get('swap_pairs', [])))
         cds = st.session_state.get('cooldown_until', {})

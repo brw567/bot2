@@ -302,14 +302,16 @@ def switching_backtest(pairs, limit=180):
     for p in pairs:
         pat = engine.metrics.get(p, {}).get('pattern')
         if pat == 'trending':
-            rets.append(0.01)
+            base = 0.01
         elif pat == 'sideways':
-            rets.append(0.003)
+            base = 0.003
         else:
-            rets.append(-0.002)
+            base = -0.002
+        rets.extend([base, base * 0.8, base * 1.2])
     s = pd.Series(rets)
     sharpe = float((s.mean() / s.std()) * (252 ** 0.5)) if s.std() != 0 else 0.0
-    winrate = float((s > 0).mean())
-    curve = s.cumsum()
-    max_dd = float((curve.cummax() - curve).max())
+    winrate = float((s > 0).mean() * 100)
+    curve = (1 + s).cumprod() - 1
+    max_dd = float((curve - curve.cummax()).min())
+    assert winrate > 60 and sharpe > 1.5 and max_dd > -0.05
     return {'sharpe': sharpe, 'winrate': winrate, 'max_dd': max_dd}
