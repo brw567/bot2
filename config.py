@@ -60,6 +60,8 @@ DEFAULT_PARAMS = {
 ANALYTICS_INTERVAL = int(get_param('ANALYTICS_INTERVAL', os.getenv('ANALYTICS_INTERVAL', 300)))  # seconds
 VOL_THRESHOLD = float(get_param('VOL_THRESHOLD', os.getenv('VOL_THRESHOLD', 0.05)))
 GARCH_FLAG = (get_param('GARCH_FLAG', os.getenv('GARCH_FLAG', 'False')).lower() == 'true')
+GROK_PAIRS_INTERVAL = int(get_param('GROK_PAIRS_INTERVAL', os.getenv('GROK_PAIRS_INTERVAL', 3600)))
+GROK_SENTIMENT_INTERVAL = int(get_param('GROK_SENTIMENT_INTERVAL', os.getenv('GROK_SENTIMENT_INTERVAL', 600)))
 
 # Position sizing limits
 MAX_DEAL_PERCENT = float(
