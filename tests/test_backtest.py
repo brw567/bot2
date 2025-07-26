@@ -12,6 +12,9 @@ class DummyBinance:
 ccxt_stub.binance = lambda *a, **k: DummyBinance()
 sys.modules['ccxt'] = ccxt_stub
 
+import utils.binance_utils as bu
+bu.get_binance_client = lambda: DummyBinance()
+
 talib_stub = types.ModuleType('talib')
 talib_stub.EMA = lambda arr, timeperiod=12: pd.Series(arr)
 talib_stub.RSI = lambda arr, timeperiod=14: pd.Series([50]*len(arr))
@@ -51,11 +54,36 @@ arch_stub = types.ModuleType('arch')
 arch_stub.arch_model = lambda *a, **k: None
 sys.modules['arch'] = arch_stub
 
+ta_stub = types.ModuleType('ta')
+ta_stub.add_all_ta_features = lambda df, **k: df.assign(momentum_rsi=55, trend_macd_diff=1, volatility_atr=0.5)
+sys.modules['ta'] = ta_stub
+
+requests_stub = types.ModuleType('requests')
+class DummyReqEx(Exception):
+    pass
+requests_stub.RequestException = DummyReqEx
+sys.modules['requests'] = requests_stub
+
+tele_stub = types.ModuleType('utils.telegram_utils')
+async def send_notification(msg):
+    pass
+async def send_alert(msg):
+    pass
+tele_stub.send_notification = send_notification
+tele_stub.send_alert = send_alert
+sys.modules['utils.telegram_utils'] = tele_stub
+
+# onchain utils
+onchain_stub = types.ModuleType('utils.onchain_utils')
+onchain_stub.get_oi_funding = lambda pair: ({'change': 0}, 0)
+sys.modules['utils.onchain_utils'] = onchain_stub
+
 # Stub ML utils
 ml_utils_stub = types.ModuleType('utils.ml_utils')
 ml_utils_stub.fetch_historical_data = lambda *a, **k: None
 ml_utils_stub.train_model = lambda *a, **k: (None, 0.0, 0.0)
 ml_utils_stub.predict_next_price = lambda *a, **k: 0.0
+ml_utils_stub.lstm_predict = lambda df: {'confidence': 0.8}
 sys.modules['utils.ml_utils'] = ml_utils_stub
 
 # dummy torch to satisfy any indirect imports
@@ -64,12 +92,18 @@ sys.modules['torch'] = types.ModuleType('torch')
 # Environment variables for config
 os.environ.setdefault('BINANCE_API_KEY', 'x')
 os.environ.setdefault('BINANCE_API_SECRET', 'y')
+os.environ.setdefault('GROK_API_KEY', 'z')
+os.environ.setdefault('TELEGRAM_TOKEN', 't')
+os.environ.setdefault('TELEGRAM_API_ID', '1')
+os.environ.setdefault('TELEGRAM_API_HASH', 'h')
 
 import importlib
+import config
+importlib.reload(config)
+import core.analytics_engine as ae
+importlib.reload(ae)
 import backtest
 importlib.reload(backtest)
-
-
 def test_multi_backtest_returns_metrics():
     metrics = backtest.multi_backtest(['BTC/USDT', 'ETH/USDT'], limit=5)
     keys = {'sharpe', 'var', 'cvar', 'max_dd', 'winrate'}
@@ -77,5 +111,28 @@ def test_multi_backtest_returns_metrics():
 
 
 def test_switching_backtest():
+    async def _fake_fetch(self, pair, limit=100):
+        return pd.DataFrame(
+            [[i,1,1,1,1+i,1] for i in range(limit)],
+            columns=['timestamp','open','high','low','close','volume']
+        ).assign(momentum_rsi=55, trend_macd_diff=1, volatility_atr=0.5)
+
+    async def _fake_analyze_once(self):
+        for p in self.pairs:
+            self.metrics[p] = {'pattern': 'trending'}
+
+    ae.AnalyticsEngine.fetch_data = _fake_fetch
+    ae.AnalyticsEngine.analyze_once = _fake_analyze_once
+    sys.modules['core.analytics_engine'] = ae
+    ml = types.ModuleType('utils.ml_utils')
+    ml.fetch_historical_data = lambda *a, **k: None
+    ml.train_model = lambda *a, **k: (None,0.0,0.0)
+    ml.predict_next_price = lambda *a, **k: 0.0
+    ml.lstm_predict = lambda df: {'confidence':0.8}
+    sys.modules['utils.ml_utils'] = ml
+    importlib.reload(backtest)
     res = backtest.switching_backtest(['BTC/USDT'])
     assert {'sharpe', 'winrate', 'max_dd'} <= set(res)
+    assert res['winrate'] > 60
+    assert res['sharpe'] > 1.5
+    assert res['max_dd'] > -0.05

@@ -1,4 +1,5 @@
 import sys, types, importlib, asyncio, time
+import os
 
 # minimal stubs
 binance_stub = types.ModuleType('utils.binance_utils')
@@ -32,6 +33,13 @@ sys.modules['ta'] = ta_stub
 dotenv_stub = types.ModuleType('dotenv')
 dotenv_stub.load_dotenv = lambda *a, **k: None
 sys.modules['dotenv'] = dotenv_stub
+
+os.environ.setdefault('BINANCE_API_KEY', 'x')
+os.environ.setdefault('BINANCE_API_SECRET', 'y')
+os.environ.setdefault('GROK_API_KEY', 'z')
+os.environ.setdefault('TELEGRAM_TOKEN', 't')
+os.environ.setdefault('TELEGRAM_API_ID', '1')
+os.environ.setdefault('TELEGRAM_API_HASH', 'h')
 
 import core.analytics_engine as ae
 importlib.reload(ae)
