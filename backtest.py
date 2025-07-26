@@ -1,3 +1,4 @@
+import asyncio
 import pandas as pd
 import talib
 import ccxt
@@ -283,3 +284,10 @@ def ml_backtest(symbol='BTC/USDT', timeframe='5m', years=1):
     except Exception as e:
         logging.error(f"ML backtest failed for {symbol}: {e}")
         return {}
+
+def pattern_backtest(pairs):
+    """Simple pattern-based simulation using AnalyticsEngine metrics."""
+    from core.analytics_engine import AnalyticsEngine
+    engine = AnalyticsEngine(pairs)
+    asyncio.run(engine.analyze_once())
+    return {p: m.get('pattern') for p, m in engine.metrics.items()}

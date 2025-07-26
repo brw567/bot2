@@ -11,7 +11,7 @@ import pandas as pd
 import talib
 from st_aggrid import AgGrid, GridOptionsBuilder
 import redis
-from config import DB_PATH, DEFAULT_PARAMS, REDIS_HOST, REDIS_PORT, REDIS_DB, BINANCE_WEIGHT_LIMIT
+from config import DB_PATH, DEFAULT_PARAMS, REDIS_HOST, REDIS_PORT, REDIS_DB, BINANCE_WEIGHT_LIMIT, ANALYTICS_PAIRS, ANALYTICS_TIMEFRAME, CONFIDENCE_THRESHOLD
 from db_utils import (
     init_db,
     get_param,
@@ -34,6 +34,7 @@ from utils.ml_utils import predict_next_price, train_model
 from strategies.arbitrage_strategy import ArbitrageStrategy
 from strategies.grid_strategy import GridStrategy
 from strategies.mev_strategy import MEVStrategy
+from core.analytics_engine import AnalyticsEngine
 from backtest import simple_backtest, advanced_backtest, ml_backtest
 
 handler = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5)
@@ -357,6 +358,9 @@ if __name__ == '__main__':
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    engine = AnalyticsEngine(ANALYTICS_PAIRS, timeframe=ANALYTICS_TIMEFRAME)
+    st.session_state["engine"] = engine
+    threading.Thread(target=lambda: loop.run_until_complete(engine.continuous_analyze()), daemon=True).start()
     threading.Thread(target=lambda: loop.run_until_complete(monitoring_loop()), daemon=True).start()
 
     # Sidebar for critical buttons (always visible)
@@ -414,6 +418,9 @@ if __name__ == '__main__':
         volatile_flag = r.get('market_volatile')
         vol_val = json.loads(volatile_flag)['volatile'] if volatile_flag else False
         st.metric('Market Volatile', str(vol_val))
+        eng_metrics = st.session_state.get('engine').metrics if 'engine' in st.session_state else {}
+        if eng_metrics:
+            st.dataframe(pd.DataFrame.from_dict(eng_metrics, orient='index'))
         st.write('Active pairs:', ', '.join(st.session_state.get('active_pairs', [])))
         st.write('Swap pairs:', ', '.join(st.session_state.get('swap_pairs', [])))
         cds = st.session_state.get('cooldown_until', {})
