@@ -4,6 +4,7 @@ import talib
 import ccxt
 import vectorbt as vbt
 import backtrader as bt
+import datetime as dt
 from sklearn.cluster import KMeans
 from arch import arch_model
 import logging
@@ -293,25 +294,34 @@ def pattern_backtest(pairs):
     return {p: m.get('pattern') for p, m in engine.metrics.items()}
 
 
-def switching_backtest(pairs, limit=180):
-    """Simulate strategy switching based on AnalyticsEngine patterns."""
+def switching_backtest(pairs, timeframe='1d'):
+    """Simulate strategy switching using 2025 Q1-Q2 historical data."""
     from core.analytics_engine import AnalyticsEngine
-    engine = AnalyticsEngine(pairs)
+    client = ccxt.binance({'apiKey': BINANCE_API_KEY, 'secret': BINANCE_API_SECRET})
+    since = int(dt.datetime(2025, 1, 1).timestamp() * 1000)
+    end = int(dt.datetime(2025, 6, 30).timestamp() * 1000)
+    engine = AnalyticsEngine(pairs, timeframe=timeframe)
     asyncio.run(engine.analyze_once())
-    rets = []
+    returns = []
     for p in pairs:
+        ohlcv = client.fetch_ohlcv(p, timeframe, since=since)
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df = df[df['timestamp'] <= end]
+        daily = df['close'].pct_change().fillna(0)
         pat = engine.metrics.get(p, {}).get('pattern')
         if pat == 'trending':
-            base = 0.01
+            factor = 1.0
         elif pat == 'sideways':
-            base = 0.003
+            factor = 0.3
         else:
-            base = -0.002
-        rets.extend([base, base * 0.8, base * 1.2])
-    s = pd.Series(rets)
+            factor = -0.2
+        returns.extend(daily * factor)
+    s = pd.Series(returns)
     sharpe = float((s.mean() / s.std()) * (252 ** 0.5)) if s.std() != 0 else 0.0
     winrate = float((s > 0).mean() * 100)
     curve = (1 + s).cumprod() - 1
     max_dd = float((curve - curve.cummax()).min())
-    assert winrate > 60 and sharpe > 1.5 and max_dd > -0.05
+    assert winrate > 60, f"Winrate {winrate} below 60%"
+    assert sharpe > 1.5, f"Sharpe {sharpe} below 1.5"
+    assert max_dd > -0.05, f"Drawdown {max_dd} exceeds 5%"
     return {'sharpe': sharpe, 'winrate': winrate, 'max_dd': max_dd}

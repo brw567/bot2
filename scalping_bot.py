@@ -428,6 +428,12 @@ if __name__ == '__main__':
             gbm = GridOptionsBuilder.from_dataframe(dfm)
             gbm.configure_default_column(editable=False)
             AgGrid(dfm.style.apply(_hl, axis=1), gridOptions=gbm.build(), height=300)
+            prev = st.session_state.get('prev_strategies', {})
+            current = {p: m.get('strategy') for p, m in eng_metrics.items()}
+            for pair, strat in current.items():
+                if pair in prev and prev[pair] != strat:
+                    st.warning(f"Switched to {strat} on {pair}")
+            st.session_state['prev_strategies'] = current
         st.write('Active pairs:', ', '.join(st.session_state.get('active_pairs', [])))
         st.write('Swap pairs:', ', '.join(st.session_state.get('swap_pairs', [])))
         cds = st.session_state.get('cooldown_until', {})

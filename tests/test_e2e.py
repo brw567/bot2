@@ -51,10 +51,12 @@ def test_e2e_cycle():
         sys.modules['dotenv'] = dotenv_stub
 
         tele_stub = types.ModuleType('utils.telegram_utils')
+        notifications = []
+        alerts = []
         async def send_notification(msg):
-            pass
+            notifications.append(msg)
         async def send_alert(msg):
-            pass
+            alerts.append(msg)
         tele_stub.send_notification = send_notification
         tele_stub.send_alert = send_alert
         sys.modules['utils.telegram_utils'] = tele_stub
@@ -72,11 +74,13 @@ def test_e2e_cycle():
         importlib.reload(bt)
 
         engine = ae.AnalyticsEngine(['BTC/USDT'])
+        engine.metrics['BTC/USDT'] = {'strategy': 'grid'}
         asyncio.run(engine.analyze_once())
         res = bt.switching_backtest(['BTC/USDT'])
         assert res['winrate'] > 60
         assert res['sharpe'] > 1.5
         assert res['max_dd'] > -0.05
+        assert notifications or alerts
     finally:
         for k, v in originals.items():
             if v is not None:
