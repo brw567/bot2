@@ -9,6 +9,8 @@ The Ultimate Crypto Scalping Bot is an advanced trading tool designed for high-f
 - Risk controls (drawdown pauses, quotas) for capital preservation.
 - User-friendly GUI and mobile alerts.
 - Backup price fetch from Grok when Binance fails (UI shows yellow highlight).
+- AnalyticsEngine falls back to Grok for OHLCV if Binance errors (row highlighted in yellow).
+- Telegram alerts on strategy switches and critical errors (set TELEGRAM_* keys in .env).
 - Grok recommends additional pairs, monitoring 5x the configured amount for analytics.
 - Market volatility indicator with automatic pair swapping based on configurable thresholds.
 - Async AnalyticsEngine monitors multiple pairs and suggests strategy switches.
@@ -57,6 +59,8 @@ corresponding chains (Bitcoin, Ethereum, Solana).
 
 ### Setup
 Run `./install.sh` to initialize. See Install Guide.md for details.
+Create a `.env` with Binance, Grok and Telegram keys. Telegram credentials enable
+real-time switch alerts when the AnalyticsEngine changes strategies.
 
 ### Contribution
 Fork repo, create feature branch, PR with tests.

@@ -74,3 +74,8 @@ def test_multi_backtest_returns_metrics():
     metrics = backtest.multi_backtest(['BTC/USDT', 'ETH/USDT'], limit=5)
     keys = {'sharpe', 'var', 'cvar', 'max_dd', 'winrate'}
     assert keys.issubset(metrics)
+
+
+def test_switching_backtest():
+    res = backtest.switching_backtest(['BTC/USDT'])
+    assert {'sharpe', 'winrate', 'max_dd'} <= set(res)

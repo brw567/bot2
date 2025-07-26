@@ -233,6 +233,27 @@ def get_backup_price(symbol: str) -> float:
     return 0.0
 
 
+async def grok_fetch_ohlcv(symbol: str, timeframe: str, limit: int = 100):
+    """Fetch OHLCV data via Grok when the exchange API fails."""
+    try:
+        prompt = {
+            "task": "ohlcv",
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "limit": limit,
+            "output_schema": {"ohlcv": "list[list]"},
+        }
+        logging.info(f"Task ohlcv for {symbol}")
+        result = grok_api_call(prompt)
+        if isinstance(result, dict) and "ohlcv" in result:
+            return result["ohlcv"]
+        if hasattr(result, "ohlcv"):
+            return result.ohlcv
+    except Exception as e:
+        logging.error(f"Grok OHLCV fetch failed for {symbol}: {e}")
+    return []
+
+
 class RecommendedPairsResponse(BaseModel):
     """Response model for recommended trading pairs."""
     pairs: list[str]
