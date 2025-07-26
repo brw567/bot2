@@ -76,6 +76,7 @@ sys.modules['utils.telegram_utils'] = tele_stub
 # onchain utils
 onchain_stub = types.ModuleType('utils.onchain_utils')
 onchain_stub.get_oi_funding = lambda pair: ({'change': 0}, 0)
+onchain_stub.get_dune_data = lambda: {'volume': 0}
 sys.modules['utils.onchain_utils'] = onchain_stub
 
 # Stub ML utils
