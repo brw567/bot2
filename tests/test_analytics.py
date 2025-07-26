@@ -13,7 +13,7 @@ os.environ.setdefault('BINANCE_API_SECRET', 'y')
 
 
 def test_analyze_once():
-    originals = {k: sys.modules.get(k) for k in ['utils.binance_utils','utils.ml_utils','utils.onchain_utils','redis','ta','dotenv']}
+    originals = {k: sys.modules.get(k) for k in ['utils.binance_utils','utils.ml_utils','utils.onchain_utils','redis','ta','dotenv','utils.config']}
     try:
         binance_stub = types.ModuleType('utils.binance_utils')
         class DummyClient:
@@ -28,6 +28,7 @@ def test_analyze_once():
 
         onchain_stub = types.ModuleType('utils.onchain_utils')
         onchain_stub.get_oi_funding = lambda pair: ({'change': 0}, 0)
+        onchain_stub.get_dune_data = lambda: {}
         sys.modules['utils.onchain_utils'] = onchain_stub
 
         redis_stub = types.ModuleType('redis')
@@ -46,6 +47,54 @@ def test_analyze_once():
         dotenv_stub = types.ModuleType('dotenv')
         dotenv_stub.load_dotenv = lambda *a, **k: None
         sys.modules['dotenv'] = dotenv_stub
+
+        pyd_stub = types.ModuleType('pydantic')
+        class BaseModel:
+            def __init__(self, **k):
+                pass
+        class ValidationError(Exception):
+            pass
+        pyd_stub.BaseModel = BaseModel
+        pyd_stub.ValidationError = ValidationError
+        sys.modules['pydantic'] = pyd_stub
+
+        pyd_stub = types.ModuleType('pydantic')
+        class BaseModel:
+            def __init__(self, **k):
+                pass
+        class ValidationError(Exception):
+            pass
+        pyd_stub.BaseModel = BaseModel
+        pyd_stub.ValidationError = ValidationError
+        sys.modules['pydantic'] = pyd_stub
+
+        cfg_stub = types.ModuleType('utils.config')
+        cfg_stub.load_config_from_db = lambda: {
+            'max_active_pairs': 1,
+            'swap_pair_multiplier': 1,
+            'grok_interval': 10,
+            'dune_interval': 10,
+            'analytics_interval': 60,
+            'swap_threshold': 1.5,
+            'cooldown': 60,
+            'forecast_period': 10,
+            'history_period': 60,
+        }
+        sys.modules['utils.config'] = cfg_stub
+
+        cfg_stub = types.ModuleType('utils.config')
+        cfg_stub.load_config_from_db = lambda: {
+            'max_active_pairs': 1,
+            'swap_pair_multiplier': 1,
+            'grok_interval': 10,
+            'dune_interval': 10,
+            'analytics_interval': 60,
+            'swap_threshold': 1.5,
+            'cooldown': 60,
+            'forecast_period': 10,
+            'history_period': 60,
+        }
+        sys.modules['utils.config'] = cfg_stub
 
         ae = importlib.import_module('core.analytics_engine')
         importlib.reload(ae)
@@ -78,6 +127,7 @@ def test_fallback_and_notify():
         async def grok_fetch_ohlcv(pair, tf, limit=100):
             return [[i,1,1,1,1+i,1] for i in range(limit)]
         grok_stub.grok_fetch_ohlcv = grok_fetch_ohlcv
+        grok_stub.get_grok_pairs = lambda c: []
         sys.modules['utils.grok_utils'] = grok_stub
 
         ml_stub = types.ModuleType('utils.ml_utils')
@@ -86,6 +136,7 @@ def test_fallback_and_notify():
 
         onchain_stub = types.ModuleType('utils.onchain_utils')
         onchain_stub.get_oi_funding = lambda pair: ({'change': 0}, 0)
+        onchain_stub.get_dune_data = lambda: {}
         sys.modules['utils.onchain_utils'] = onchain_stub
 
         redis_stub = types.ModuleType('redis')
@@ -120,6 +171,87 @@ def test_fallback_and_notify():
         m = engine.metrics['BTC/USDT']
         assert m['data_source'] == 'grok'
         assert calls and 'Switch to' in calls[0]
+    finally:
+        for k, v in originals.items():
+            if v is not None:
+                sys.modules[k] = v
+            else:
+                sys.modules.pop(k, None)
+
+
+def test_volatility_and_swapping():
+    originals = {k: sys.modules.get(k) for k in ['utils.binance_utils','utils.ml_utils','utils.onchain_utils','redis','ta','dotenv','utils.config','utils.grok_utils']}
+    try:
+        binance_stub = types.ModuleType('utils.binance_utils')
+        class DummyClient:
+            def fetch_ohlcv(self, pair, tf, limit=100):
+                return [[i,1,1,1,1+i,1] for i in range(limit)]
+        binance_stub.get_binance_client = lambda: DummyClient()
+        sys.modules['utils.binance_utils'] = binance_stub
+
+        ml_stub = types.ModuleType('utils.ml_utils')
+        ml_stub.lstm_predict = lambda df: {'confidence': 0.8}
+        sys.modules['utils.ml_utils'] = ml_stub
+
+        onchain_stub = types.ModuleType('utils.onchain_utils')
+        onchain_stub.get_oi_funding = lambda pair: ({'change': 20}, 0)
+        onchain_stub.get_dune_data = lambda: {'oi_change': 12}
+        sys.modules['utils.onchain_utils'] = onchain_stub
+
+        redis_stub = types.ModuleType('redis')
+        class DummyRedis:
+            def __init__(self, *a, **k):
+                pass
+            def set(self, *a, **k):
+                pass
+        redis_stub.Redis = DummyRedis
+        sys.modules['redis'] = redis_stub
+
+        ta_stub = types.ModuleType('ta')
+        ta_stub.add_all_ta_features = lambda df, **k: df.assign(momentum_rsi=55, trend_macd_diff=1, volatility_atr=3.0)
+        sys.modules['ta'] = ta_stub
+
+        dotenv_stub = types.ModuleType('dotenv')
+        dotenv_stub.load_dotenv = lambda *a, **k: None
+        sys.modules['dotenv'] = dotenv_stub
+
+        pyd_stub = types.ModuleType('pydantic')
+        class BaseModel:
+            def __init__(self, **k):
+                pass
+        class ValidationError(Exception):
+            pass
+        pyd_stub.BaseModel = BaseModel
+        pyd_stub.ValidationError = ValidationError
+        sys.modules['pydantic'] = pyd_stub
+
+        cfg_stub = types.ModuleType('utils.config')
+        cfg_stub.load_config_from_db = lambda: {
+            'max_active_pairs': 1,
+            'swap_pair_multiplier': 2,
+            'grok_interval': 10,
+            'dune_interval': 5,
+            'analytics_interval': 60,
+            'swap_threshold': 1.5,
+            'cooldown': 60,
+            'forecast_period': 10,
+            'history_period': 60,
+        }
+        sys.modules['utils.config'] = cfg_stub
+
+        grok_stub = types.ModuleType('utils.grok_utils')
+        grok_stub.get_grok_pairs = lambda c: ['A/USDT','B/USDT'][:c]
+        sys.modules['utils.grok_utils'] = grok_stub
+
+        ae = importlib.import_module('core.analytics_engine')
+        importlib.reload(ae)
+        engine = ae.AnalyticsEngine(['A/USDT','B/USDT'])
+        asyncio.run(engine.analyze_once())
+        engine.metrics['A/USDT']['rating'] = 1.0
+        engine.metrics['B/USDT'] = {'rating': 2.0}
+        engine.handle_swapping()
+        assert 'B/USDT' in engine.active_pairs
+        assert engine.volatile is True
     finally:
         for k, v in originals.items():
             if v is not None:

@@ -31,6 +31,7 @@ def test_e2e_cycle():
 
         onchain_stub = types.ModuleType('utils.onchain_utils')
         onchain_stub.get_oi_funding = lambda pair: ({'change': 0}, 0)
+        onchain_stub.get_dune_data = lambda: {}
         sys.modules['utils.onchain_utils'] = onchain_stub
 
         redis_stub = types.ModuleType('redis')
@@ -60,6 +61,16 @@ def test_e2e_cycle():
         tele_stub.send_notification = send_notification
         tele_stub.send_alert = send_alert
         sys.modules['utils.telegram_utils'] = tele_stub
+
+        pyd_stub = types.ModuleType('pydantic')
+        class BaseModel:
+            def __init__(self, **k):
+                pass
+        class ValidationError(Exception):
+            pass
+        pyd_stub.BaseModel = BaseModel
+        pyd_stub.ValidationError = ValidationError
+        sys.modules['pydantic'] = pyd_stub
 
         ccxt_stub = types.ModuleType('ccxt')
         class DummyBinance:

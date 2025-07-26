@@ -96,3 +96,14 @@ def check_user(username: str, password: str) -> bool:
     row = cursor.fetchone()
     conn.close()
     return row is not None and row[0] == password
+
+
+# Convenience wrappers used by the analytics engine
+def store_var(key: str, value: str) -> None:
+    """Store a variable in the DB settings table."""
+    save_param(key, value)
+
+
+def get_var(key: str, default=None):
+    """Return a variable from the DB with fallback."""
+    return get_param(key, default)

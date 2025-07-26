@@ -105,3 +105,8 @@ def fetch_sth_rpl(symbol: str = "BTC") -> float:
     """Return the latest STH RPL value using :func:`fetch_dune_metrics`."""
     metrics = fetch_dune_metrics(symbol)
     return float(metrics.get("sth_rpl", 0.0))
+
+
+def get_dune_data(symbol: str = "BTC") -> dict:
+    """Simple wrapper returning cached Dune metrics."""
+    return fetch_dune_metrics(symbol)
