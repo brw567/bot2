@@ -117,3 +117,7 @@ class BaseStrategy:
         except Exception as e:
             logging.error(f"SL/TP calculation failed for {symbol}: {e}")
             return None, None
+
+    def switch_strategy(self, name: str):
+        """Placeholder for dynamic strategy switching."""
+        logging.info(f"Switching strategy to {name}")
