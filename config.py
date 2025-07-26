@@ -50,3 +50,8 @@ DEFAULT_PARAMS = {
     'grok_timeout': GROK_TIMEOUT,
     'auto_pair_limit': 10,  # Number of pairs to auto-trade (monitor 5x for analytics)
 }
+
+# Analytics settings for ContinuousAnalyzer
+ANALYTICS_INTERVAL = int(os.getenv('ANALYTICS_INTERVAL', 300))  # seconds
+VOL_THRESHOLD = float(os.getenv('VOL_THRESHOLD', 0.05))
+GARCH_FLAG = os.getenv('GARCH_FLAG', 'False').lower() == 'true'
