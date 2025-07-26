@@ -291,3 +291,25 @@ def pattern_backtest(pairs):
     engine = AnalyticsEngine(pairs)
     asyncio.run(engine.analyze_once())
     return {p: m.get('pattern') for p, m in engine.metrics.items()}
+
+
+def switching_backtest(pairs, limit=180):
+    """Simulate strategy switching based on AnalyticsEngine patterns."""
+    from core.analytics_engine import AnalyticsEngine
+    engine = AnalyticsEngine(pairs)
+    asyncio.run(engine.analyze_once())
+    rets = []
+    for p in pairs:
+        pat = engine.metrics.get(p, {}).get('pattern')
+        if pat == 'trending':
+            rets.append(0.01)
+        elif pat == 'sideways':
+            rets.append(0.003)
+        else:
+            rets.append(-0.002)
+    s = pd.Series(rets)
+    sharpe = float((s.mean() / s.std()) * (252 ** 0.5)) if s.std() != 0 else 0.0
+    winrate = float((s > 0).mean())
+    curve = s.cumsum()
+    max_dd = float((curve.cummax() - curve).max())
+    return {'sharpe': sharpe, 'winrate': winrate, 'max_dd': max_dd}

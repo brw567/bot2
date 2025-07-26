@@ -39,16 +39,28 @@ class AnalyticsEngine:
             self.redis = redis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT, db=config.REDIS_DB)
         except Exception:
             self.redis = None
+        missing = [k for k in ['BINANCE_API_KEY', 'BINANCE_API_SECRET', 'GROK_API_KEY'] if not getattr(config, k, None)]
+        if missing:
+            logging.warning("Missing API keys: %s", ', '.join(missing))
 
     async def fetch_data(self, pair: str, limit: int = 100) -> pd.DataFrame:
-        """Return OHLCV dataframe for the pair."""
-        client = get_binance_client()
-        ohlcv = await asyncio.to_thread(client.fetch_ohlcv, pair, self.timeframe, limit=limit)
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        """Return OHLCV dataframe for the pair with Grok fallback."""
+        try:
+            client = get_binance_client()
+            ohlcv = await asyncio.to_thread(client.fetch_ohlcv, pair, self.timeframe, limit=limit)
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['source'] = 'binance'
+            df = add_all_ta_features(df, open='open', high='high', low='low', close='close', volume='volume')
+        except Exception as e:
+            logging.error(f"Binance fetch failed for {pair}: {e}")
+            from utils.grok_utils import grok_fetch_ohlcv  # local import to avoid overhead
+            ohlcv = await grok_fetch_ohlcv(pair, self.timeframe, limit)
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['source'] = 'grok'
+            df = add_all_ta_features(df, open='open', high='high', low='low', close='close', volume='volume')
         return df
 
     def compute_metrics(self, df: pd.DataFrame) -> dict:
-        df = add_all_ta_features(df, open='open', high='high', low='low', close='close', volume='volume')
         rsi = float(df['momentum_rsi'].iloc[-1]) if 'momentum_rsi' in df else 50.0
         macd_diff = float(df['trend_macd_diff'].iloc[-1]) if 'trend_macd_diff' in df else 0.0
         atr = float(df['volatility_atr'].iloc[-1]) if 'volatility_atr' in df else 0.0
@@ -70,7 +82,7 @@ class AnalyticsEngine:
             try:
                 df = await self.fetch_data(pair)
                 metrics = self.compute_metrics(df)
-                oi, _ = get_oi_funding(pair)
+                oi, funding = get_oi_funding(pair)
                 oi_change = oi.get('change', 0) if isinstance(oi, dict) else 0
                 if metrics['macd_diff'] > 0 and metrics['rsi'] > 50:
                     pattern = 'trending'
@@ -84,7 +96,16 @@ class AnalyticsEngine:
                     metrics.update({'pattern': pattern, 'strategy': strategy, 'oi_change': oi_change})
                 else:
                     metrics.update({'pattern': 'hold', 'strategy': 'hold', 'oi_change': oi_change})
+                metrics['funding_rate'] = funding
+                metrics['data_source'] = df['source'].iloc[-1] if 'source' in df else 'binance'
+                prev = self.metrics.get(pair, {})
                 self.metrics[pair] = metrics
+                if prev.get('strategy') and prev.get('strategy') != metrics['strategy']:
+                    try:
+                        from utils.telegram_utils import send_notification
+                        await send_notification(f"Switch to {metrics['strategy']} on {pair}")
+                    except Exception as e:
+                        logging.error(f"Notification failed: {e}")
                 if self.redis:
                     try:
                         self.redis.set(f"metrics:{pair}", json.dumps(metrics))
