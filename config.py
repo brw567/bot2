@@ -19,6 +19,10 @@ TELEGRAM_TOKEN = get_param('TELEGRAM_TOKEN', os.getenv('TELEGRAM_TOKEN'))
 TELEGRAM_API_ID = int(get_param('TELEGRAM_API_ID', os.getenv('TELEGRAM_API_ID') or 0))
 TELEGRAM_API_HASH = get_param('TELEGRAM_API_HASH', os.getenv('TELEGRAM_API_HASH'))
 TELEGRAM_SESSION = get_param('TELEGRAM_SESSION', os.getenv('TELEGRAM_SESSION'))
+NOTIFICATIONS_ENABLED = (
+    get_param('NOTIFICATIONS_ENABLED', os.getenv('NOTIFICATIONS_ENABLED', 'True'))
+    .lower() == 'true'
+)
 
 # Grok API for AI-driven risk assessment and parameter tuning (requests)
 GROK_API_KEY = get_param('GROK_API_KEY', os.getenv('GROK_API_KEY'))
